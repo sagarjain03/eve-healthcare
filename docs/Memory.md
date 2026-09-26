@@ -4,15 +4,32 @@
 > Keep entries short. Newest entries on top in the Log.
 
 ## Current Status
-- **Current phase:** Phase 1 complete
+- **Current phase:** Phase 2 complete
 - **Currently working on (file):** —
-- **Next step:** Start Phase 2 — Authentication APIs (signup, login, refresh, me)
+- **Next step:** Start Phase 3 — Centres & Tests catalog
 
 ## Completed Phases
 - [x] Phase 0 — Project Setup (commit: chore: project setup with django, drf and postgres)
 - [x] Phase 1 — Common Layer + Custom User (commit: feat: common utilities and custom user model)
+- [x] Phase 2 — Authentication APIs (commit: feat: jwt authentication)
 
 ## Files Created / Modified
+### Phase 2
+- config/settings/base.py — `SIMPLE_JWT` (lifetimes from env), `ScopedRateThrottle` + `auth: 10/min`
+- .env, .env.example — added `JWT_ACCESS_MINUTES`, `JWT_REFRESH_DAYS`
+- apps/common/exceptions.py — added `EmailAlreadyExists(Conflict)` (`EMAIL_ALREADY_EXISTS`)
+- apps/common/views.py — added `@extend_schema` to `health_check` (it was missing from Swagger)
+- apps/accounts/services.py — `register_user()` (duplicate check + IntegrityError → 409)
+- apps/accounts/serializers.py — `SignupSerializer`, `UserSerializer`, `EmailTokenObtainPairSerializer`
+- apps/accounts/views.py — `SignupView`, `LoginView`, `RefreshView`, `MeView`
+- apps/accounts/urls.py — `/auth/signup/`, `/auth/login/`, `/auth/token/refresh/`, `/auth/me/`
+- config/urls.py — mounted `auth/`
+- apps/accounts/tests/factories.py — `UserFactory` (password "StrongPass!123")
+- conftest.py (project root) — shared fixtures: `api_client`, `user`, `admin_user`, `auth_client`, `admin_client`, autouse cache clear
+- tests/conftest.py — deleted (moved to root, see Decisions)
+- apps/accounts/tests/test_services.py, apps/accounts/tests/test_api.py
+- docs/Architecture.md — folder tree: conftest.py now at project root
+
 ### Phase 1
 - apps/common/models.py — abstract `TimeStampedModel` (created_at, updated_at)
 - apps/common/exceptions.py — `DomainError` + NotFound/Conflict/InvalidStateTransition/BusinessRuleViolation/InvalidSignature, `custom_exception_handler`
@@ -52,12 +69,20 @@
 - DB also enforces it: `UniqueConstraint(Lower("email"), name="user_email_ci_unique")` (migration `accounts/0002_user_email_ci_unique`, a unique index on `LOWER(email)`). Catches writes that bypass `save()` (`bulk_create`, `.update()`, raw SQL).
 - Error shape is always `{"error": {"code", "message", "details"}}`. Codes: domain errors use their own (`NOT_FOUND`, `CONFLICT`, `INVALID_STATE_TRANSITION`, `BUSINESS_RULE_VIOLATION`, `INVALID_SIGNATURE`); DRF validation → `VALIDATION_ERROR` with field errors in `details`; other DRF errors → `default_code` upper-cased (e.g. `NOT_AUTHENTICATED`, `PERMISSION_DENIED`, `THROTTLED`).
 - Class-level Django config (admin options, `REQUIRED_FIELDS`) uses tuples, not lists, to satisfy ruff RUF012.
+- Duplicate email on signup → **409** `EMAIL_ALREADY_EXISTS` (not 400): it's a conflict with existing state, not bad input.
+- Login email is case-insensitive (`EmailTokenObtainPairSerializer` lowercases before authenticating).
+- Signup returns the created user (201) **without tokens** — client calls `/auth/login/` next. Keeps signup and login single-purpose.
+- Signup/login/refresh have `authentication_classes = ()` so a stale or garbage `Authorization` header can't block them.
+- Auth endpoints (signup + login) share throttle scope `auth` = 10/min per IP.
+- Tests clear Django's cache before/after each test (autouse fixture) so throttle counters don't leak between tests.
+- Shared fixtures live in a **root `conftest.py`**, not `tests/conftest.py`: pytest only applies a conftest to tests in its own folder or below, so fixtures in `tests/` were invisible to `apps/*/tests/`.
 
 ## Known Issues / TODO
 - No superuser yet — developer runs `uv run python manage.py createsuperuser` manually.
 - If `uv run pytest` fails with "uv trampoline failed to canonicalize script path", regenerate the launchers: `uv sync --reinstall-package pytest --reinstall-package django`.
 
 ## Log
+- 2026-09-27 — Phase 2 finished: signup/login/refresh/me with JWT, auth throttle, factories + shared fixtures. Verified: check ✅, makemigrations --check ✅, pytest 32 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live signup → login → /auth/me/ ✅.
 - 2026-09-27 — Added DB-level case-insensitive unique constraint on User.email (migration 0002) + bypass-save test. pytest 15 passed ✅, ruff clean ✅.
 - 2026-09-27 — Phase 1 finished: TimeStampedModel, domain exceptions + handler, pagination, IsAdminOrReadOnly, custom User + admin, first migrate. Verified: check ✅, showmigrations accounts [X] 0001_initial ✅, pytest 14 passed ✅, ruff clean ✅.
 - 2026-09-27 — Phase 0 finished: split settings, env config, health endpoint, Swagger, pytest + ruff setup, docker db. Verified: check ✅, pytest 1 passed ✅, ruff clean ✅, /health/ 200 ✅, /api/schema/ 200 ✅, /api/docs/ 200 ✅.

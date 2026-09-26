@@ -160,6 +160,7 @@ Design notes:
 ```
 eve-diagnostics/
 ├── README.md
+├── conftest.py                 # shared pytest fixtures (api_client, user, auth_client, admin_client)
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env.example
@@ -227,8 +228,8 @@ eve-diagnostics/
 │       └── tests/
 ├── scripts/
 │   └── send_webhook.py         # simulates provider: signs + sends webhook (for demo)
-└── tests/
-    └── conftest.py             # shared fixtures (api_client, user, auth_client, admin)
+└── tests/                      # project-level tests (e.g. /health/)
+    └── test_health.py
 ```
 
 ## 6. API Endpoints

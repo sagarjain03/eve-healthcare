@@ -33,6 +33,11 @@ class InvalidStateTransition(Conflict):
     message = "Invalid state transition."
 
 
+class EmailAlreadyExists(Conflict):
+    code = "EMAIL_ALREADY_EXISTS"
+    message = "A user with this email already exists."
+
+
 class BusinessRuleViolation(DomainError):
     status_code = 400
     code = "BUSINESS_RULE_VIOLATION"
