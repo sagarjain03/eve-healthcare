@@ -1,4 +1,6 @@
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
 from apps.bookings.tests.factories import BookingFactory
 from apps.payments.models import Payment
@@ -175,6 +177,20 @@ def test_list_returns_only_my_payments_and_filters_by_booking(auth_client, user,
         mine_other_booking.reference,
     }
     assert [p["reference"] for p in filtered.json()["results"]] == [mine.reference]
+
+
+def test_list_query_count_is_constant(auth_client, user):
+    PaymentFactory(booking=BookingFactory(user=user))
+    with CaptureQueriesContext(connection) as one_row:
+        auth_client.get(PAYMENTS_URL)
+
+    for _ in range(9):
+        PaymentFactory(booking=BookingFactory(user=user))
+    with CaptureQueriesContext(connection) as many_rows:
+        response = auth_client.get(PAYMENTS_URL)
+
+    assert response.json()["count"] == 10
+    assert len(many_rows) == len(one_row)
 
 
 @pytest.mark.parametrize("method", ["patch", "delete"])

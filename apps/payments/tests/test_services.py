@@ -1,6 +1,9 @@
+import threading
 from datetime import timedelta
 
 import pytest
+from django.db import connection
+from django.db.models import QuerySet
 from django.utils import timezone
 
 from apps.bookings.models import BookingStatus
@@ -125,6 +128,90 @@ def test_paying_past_appointment_is_rejected():
         pay(booking, "SUCCESS")
 
     assert exc_info.value.code == "APPOINTMENT_ALREADY_PASSED"
+
+
+# --- Race branches (pre-check passes, DB constraint catches it) ---
+
+
+def test_in_progress_race_is_caught_by_one_active_constraint(booking, monkeypatch):
+    PaymentFactory(booking=booking)  # PENDING payment already exists
+    monkeypatch.setattr(QuerySet, "exists", lambda self: False)  # pre-check misses it
+
+    with pytest.raises(Conflict) as exc_info:
+        pay(booking, "SUCCESS")
+
+    assert exc_info.value.code == "PAYMENT_IN_PROGRESS"
+
+
+def test_already_paid_race_is_caught_by_one_active_constraint(booking, monkeypatch):
+    # A concurrent request's SUCCESS payment committed after our status check
+    PaymentFactory(booking=booking, status=PaymentStatus.SUCCESS)
+    real_exists = QuerySet.exists
+    # Only the in-progress pre-check misses; the "is it already paid?" lookup stays real
+    monkeypatch.setattr(
+        QuerySet,
+        "exists",
+        lambda self: False if self.query.where and "PENDING" in str(self.query) else
+        real_exists(self),
+    )
+
+    with pytest.raises(Conflict) as exc_info:
+        pay(booking, "SUCCESS")
+
+    assert exc_info.value.code == "BOOKING_NOT_PAYABLE"
+
+
+def test_idempotency_key_race_returns_the_winning_payment(booking, monkeypatch):
+    winner = PaymentFactory(booking=booking, status=PaymentStatus.FAILED, idempotency_key="k-r")
+    transition(booking, BookingStatus.FAILED)
+    real_find = services._find_idempotent_replay
+    calls = []
+
+    def find_once_missing(*args):
+        calls.append(args)
+        return None if len(calls) == 1 else real_find(*args)  # 1st lookup loses the race
+
+    monkeypatch.setattr(services, "_find_idempotent_replay", find_once_missing)
+
+    payment, created = pay(booking, "SUCCESS", idempotency_key="k-r")
+
+    assert (payment.pk, created) == (winner.pk, False)
+    assert booking.payments.count() == 1
+
+
+# --- Concurrency ---
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_payments_for_same_booking_only_one_succeeds():
+    booking = BookingFactory()
+    threads_count = 5
+    barrier = threading.Barrier(threads_count)
+    created, rejected, errors = [], [], []
+
+    def worker():
+        try:
+            barrier.wait()
+            create_payment(user=booking.user, booking_id=booking.id, outcome="SUCCESS")
+            created.append(True)
+        except Conflict as exc:
+            rejected.append(exc.code)
+        except Exception as exc:  # noqa: BLE001 — a thread's exception would vanish; assert below
+            errors.append(exc)
+        finally:
+            connection.close()
+
+    threads = [threading.Thread(target=worker) for _ in range(threads_count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert len(created) == 1  # the booking row lock serializes the requests
+    assert rejected == ["BOOKING_NOT_PAYABLE"] * (threads_count - 1)
+    assert Payment.objects.filter(booking=booking).count() == 1
+    assert reload(booking).status == BookingStatus.CONFIRMED
 
 
 # --- apply_payment_result ---

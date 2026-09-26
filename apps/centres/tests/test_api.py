@@ -1,4 +1,6 @@
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
 from apps.centres.models import CentreTest
 from apps.centres.tests.factories import CentreFactory, CentreTestFactory, DiagnosticTestFactory
@@ -268,6 +270,29 @@ def test_search_tests_by_name(api_client):
     assert result_ids(response) == [cbc.id]
 
 
+def test_normal_user_create_test_returns_403(auth_client):
+    response = auth_client.post(TESTS_URL, {"code": "NEW", "name": "New Test"}, format="json")
+
+    assert response.status_code == 403
+    assert_error_shape(response, "PERMISSION_DENIED")
+
+
+def test_admin_create_test_returns_201_with_uppercase_code(admin_client):
+    response = admin_client.post(TESTS_URL, {"code": "vitb12", "name": "Vitamin B12"}, format="json")
+
+    assert response.status_code == 201
+    assert response.json()["code"] == "VITB12"
+
+
+def test_page_size_is_capped_at_100(api_client):
+    DiagnosticTestFactory.create_batch(105)
+
+    response = api_client.get(TESTS_URL, {"page_size": 1000})
+
+    assert response.json()["count"] == 105
+    assert len(response.json()["results"]) == 100
+
+
 def test_admin_create_duplicate_test_code_different_case_returns_409(admin_client):
     DiagnosticTestFactory(code="CBC")
 
@@ -290,6 +315,19 @@ def test_centre_detail_query_count_is_constant(api_client, django_assert_max_num
         response = api_client.get(centre_url(centre.id))
 
     assert len(response.json()["tests"]) == 10
+
+
+def test_tests_list_query_count_is_constant(api_client):
+    DiagnosticTestFactory()
+    with CaptureQueriesContext(connection) as one_row:
+        api_client.get(TESTS_URL)
+
+    DiagnosticTestFactory.create_batch(15)
+    with CaptureQueriesContext(connection) as many_rows:
+        response = api_client.get(TESTS_URL)
+
+    assert response.json()["count"] == 16
+    assert len(many_rows) == len(one_row)
 
 
 def test_centre_list_query_count_is_constant(api_client, django_assert_max_num_queries):

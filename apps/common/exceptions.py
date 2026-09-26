@@ -1,3 +1,5 @@
+import math
+
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.http import Http404
 from rest_framework import exceptions as drf_exceptions
@@ -94,5 +96,8 @@ def custom_exception_handler(exc, context):
         response.data = _error_body("VALIDATION_ERROR", "Invalid input.", details)
     else:
         code = getattr(exc, "default_code", "error").upper()
-        response.data = _error_body(code, str(response.data.get("detail", exc)), {})
+        details = {}
+        if isinstance(exc, drf_exceptions.Throttled) and exc.wait is not None:
+            details = {"wait": math.ceil(exc.wait)}  # seconds until the client may retry
+        response.data = _error_body(code, str(response.data.get("detail", exc)), details)
     return response

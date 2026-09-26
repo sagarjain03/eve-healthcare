@@ -14,3 +14,6 @@ urlpatterns = [
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
 ]
+
+handler404 = 'apps.common.views.json_page_not_found'
+handler500 = 'apps.common.views.json_server_error'

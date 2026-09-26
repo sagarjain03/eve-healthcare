@@ -29,6 +29,13 @@ def test_drf_validation_error_puts_field_errors_in_details():
     assert "email" in response.data["error"]["details"]
 
 
+def test_drf_non_field_validation_error_goes_under_non_field_errors():
+    response = custom_exception_handler(drf_exceptions.ValidationError(["bad"]), {})
+
+    assert response.status_code == 400
+    assert response.data["error"]["details"] == {"non_field_errors": ["bad"]}
+
+
 def test_drf_not_authenticated_returns_401_with_code():
     response = custom_exception_handler(drf_exceptions.NotAuthenticated(), {})
 

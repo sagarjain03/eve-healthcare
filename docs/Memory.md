@@ -4,9 +4,9 @@
 > Keep entries short. Newest entries on top in the Log.
 
 ## Current Status
-- **Current phase:** Phase 6 complete
+- **Current phase:** Phase 7 complete
 - **Currently working on (file):** —
-- **Next step:** Start Phase 7 — Edge-case hardening & test review (Prd §F6 row by row, error shapes, N+1, pagination, coverage)
+- **Next step:** Start Phase 8 — Docker (app image + compose `web`), production settings (fix `check --deploy` warnings below), JSON logging, webhook retry command
 
 ## Completed Phases
 - [x] Phase 0 — Project Setup (commit: chore: project setup with django, drf and postgres)
@@ -16,8 +16,39 @@
 - [x] Phase 4 — Bookings with state machine (commit: feat: booking system with state machine)
 - [x] Phase 5 — Simulated Payments (commit: feat: simulated payment service)
 - [x] Phase 6 — Idempotent Webhook (commit: feat: idempotent payment webhook)
+- [x] Phase 7 — Edge-case hardening & test review (commit: test: edge case coverage and consistent error handling)
+
+## Coverage (Phase 7)
+- **98% overall** (942 stmts, 18 missed) — 206 tests.
+- services.py: accounts 100%, bookings 100%, centres 97%, payments 99%; state_machine.py 100%; webhook.py 100%; seed_data 100%.
+- Uncovered on purpose: model `__str__`, schema-only `swagger_fake_view` branch, final bare `raise` for an unexpected constraint.
+
+## `check --deploy` warnings (to fix in Phase 8 production settings)
+- security.W004 — `SECURE_HSTS_SECONDS` not set
+- security.W008 — `SECURE_SSL_REDIRECT` not True
+- security.W012 — `SESSION_COOKIE_SECURE` not True
+- security.W016 — `CSRF_COOKIE_SECURE` not True
+- security.W018 — `DEBUG=True` (local settings)
 
 ## Files Created / Modified
+### Phase 7
+- apps/common/views.py — `json_page_not_found` / `json_server_error` (handler404/500); health 503 now uses the standard error shape (`DATABASE_UNAVAILABLE`)
+- config/urls.py — `handler404`, `handler500`
+- apps/common/exceptions.py — 429 responses include `details.wait` (seconds)
+- apps/centres/services.py, apps/bookings/services.py, apps/payments/services.py — docstrings/type hints only
+- pyproject.toml — `[tool.coverage.run]` (source apps; omit migrations, tests, admin.py, apps.py)
+- tests/test_error_responses.py — 404/500 JSON handlers, 503, 405, 415, PARSE_ERROR, 429, page out of range, expired JWT, UPPER_SNAKE_CASE code checks
+- apps/centres/tests/test_seed_data.py — seed idempotency
+- apps/centres/tests/test_api.py — non-admin POST /tests/ 403, admin create test, page_size cap, /tests/ query count
+- apps/bookings/tests/test_api.py — naive/offset timezone tests
+- apps/payments/tests/test_api.py — /payments/ query count
+- apps/payments/tests/test_services.py — 5-thread concurrent payments, DB-constraint race branches
+- apps/accounts/tests/test_services.py, apps/bookings/tests/test_services.py — race-branch tests
+- apps/common/tests/test_exceptions.py — non-field ValidationError
+- docs/EdgeCases.md — full edge-case matrix (F6 + phases 2–7 → handler → tests)
+- docs/Phases.md — ticked Phase 7
+
+### Phase 6
 ### Phase 6
 - apps/payments/models.py — `Payment.refund_required`; `WebhookEventStatus`, `WebhookEvent` (table `webhook_events`)
 - apps/payments/migrations/0002_webhook_event_and_refund_required.py
@@ -178,16 +209,22 @@
 - Webhook `status` accepts only SUCCESS/FAILED (PENDING isn't a result). No JWT, `AllowAny`, not throttled.
 - `apply_payment_result` returns `ApplyResult` (APPLIED / NO_CHANGE / REFUND_REQUIRED) so the webhook can record the note.
 - Stored `payload` is the validated payload with `amount` as a string (JSON-safe).
+- **Every non-2xx response uses the standard error shape**, including unmatched URLs (JSON `handler404` → `NOT_FOUND`), unexpected errors (JSON `handler500` → `INTERNAL_ERROR`, generic message, no traceback; only when `DEBUG=False`) and the health check 503 (`DATABASE_UNAVAILABLE`, changed from `{"status": "error"}` in Phase 7).
+- 429 responses include `details.wait` (seconds until retry).
+- **Timezone rule**: all datetimes stored/returned in UTC (`...Z`). An appointment_at **without an offset is interpreted as UTC**; one with an offset (e.g. `+05:30`) is converted to UTC.
+- **Secrets**: `SECRET_KEY` and `WEBHOOK_SECRET` have **no defaults** (`env('...')` raises `ImproperlyConfigured` if missing), in every environment — stricter than "required when DEBUG=False". Loggers only log ids/references/statuses/amounts; never passwords, tokens, secrets or signatures.
+- **Ownership review (Phase 7)**: every bookings/payments query on user-owned rows is scoped by `user` (views' `get_queryset`, `cancel_booking`, `_create_payment_locked`, idempotency lookup). The webhook is the only unscoped path, protected by HMAC.
 - Shared fixtures live in a **root `conftest.py`**, not `tests/conftest.py`: pytest only applies a conftest to tests in its own folder or below, so fixtures in `tests/` were invisible to `apps/*/tests/`.
 
 ## Known Issues / TODO
 - ~~Cancel while payment PENDING, then webhook SUCCESS~~ — resolved in Phase 6 (`refund_required`).
 - Actual refunds for `refund_required` payments are out of scope (flag + admin filter only).
-- A non-numeric booking id (e.g. `/bookings/abc/`) doesn't match any URL, so Django's default 404 page is returned instead of the JSON error shape. Revisit in Phase 7 (a JSON `handler404` would cover every unmatched URL).
-- No superuser yet — developer runs `uv run python manage.py createsuperuser` manually.
+- ~~Non-numeric booking id returns Django's HTML 404~~ — fixed in Phase 7 by the JSON `handler404` (active when `DEBUG=False`; with `DEBUG=True` Django still shows its debug 404 page).
+- ~~No superuser yet~~ — `seed_data` creates the dev admin (`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`).
 - If `uv run pytest` fails with "uv trampoline failed to canonicalize script path", regenerate the launchers: `uv sync --reinstall-package pytest --reinstall-package django`.
 
 ## Log
+- 2026-09-27 — Phase 7 finished: EdgeCases.md matrix (all F6 rows tested), JSON 404/500 handlers, standard 503, 429 wait, new tests (expired JWT, concurrent payments, races, timezone, query counts, page_size cap, seed idempotency), coverage config. Verified: check ✅, check --deploy (5 warnings, for Phase 8), makemigrations --check ✅, pytest 206 passed, 98% coverage ✅, ruff clean ✅, spectacular --fail-on-warn ✅. .env confirmed untracked by git ✅.
 - 2026-09-27 — Phase 6 finished: WebhookEvent + refund_required, HMAC signature, idempotent process_webhook_event, webhook view, send_webhook.py. Verified: check ✅, makemigrations --check ✅, pytest 178 passed (incl. 5-thread concurrency) ✅, ruff clean ✅, spectacular --fail-on-warn ✅. Live on booking #3: same SUCCESS event ×5 → 1 PROCESSED + 4 DUPLICATE, booking CONFIRMED, 1 row with attempts=5 ✅; new FAILED event → IGNORED terminal_payment ✅; bad signature → 401 ✅; wrong amount → 400 AMOUNT_MISMATCH ✅. Grep: booking status only via state_machine; payment → booking only via apply_payment_result ✅.
 - 2026-09-27 — Phase 5 finished: Payment model + constraints, create_payment / apply_payment_result, payments API with Idempotency-Key + throttle, admin. Verified: check ✅, makemigrations --check ✅, pytest 156 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live FAILED → FAILED booking → SUCCESS → CONFIRMED → pay again 409 → key replay 200 same reference ✅, PENDING payment left for Phase 6 ✅. Grep: `booking.status =` only in state_machine.py; `payment.status =` only in apply_payment_result ✅.
 - 2026-09-27 — Phase 4 finished: Booking model + constraints, state machine, create/cancel services, bookings API, admin. Verified: check ✅, makemigrations --check ✅, pytest 117 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live signup → book → list → cancel → cancel again (409) ✅, grep: `booking.status =` only in state_machine.py ✅.

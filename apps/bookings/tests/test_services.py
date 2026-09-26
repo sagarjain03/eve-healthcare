@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import pytest
 from django.db import IntegrityError
+from django.db.models import QuerySet
 from django.utils import timezone
 
 from apps.accounts.tests.factories import UserFactory
@@ -91,6 +92,16 @@ def test_invalid_appointment_time_is_rejected(offering, days, code):
 def test_duplicate_active_booking_raises_duplicate_booking(offering):
     user, slot = UserFactory(), in_days(3)
     book(user, offering, slot)
+
+    with pytest.raises(DuplicateBooking):
+        book(user, offering, slot)
+
+
+def test_duplicate_booking_race_is_caught_by_partial_unique(offering, monkeypatch):
+    """Two requests pass the exists() pre-check at once; the partial unique index must win."""
+    user, slot = UserFactory(), in_days(3)
+    book(user, offering, slot)
+    monkeypatch.setattr(QuerySet, "exists", lambda self: False)  # simulate the lost race
 
     with pytest.raises(DuplicateBooking):
         book(user, offering, slot)

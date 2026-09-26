@@ -31,3 +31,12 @@ python_files = ["test_*.py"]
 [tool.ruff]
 line-length = 100
 extend-exclude = ["migrations"]
+
+[tool.coverage.run]
+source = ["apps"]
+omit = [
+    "*/migrations/*",
+    "*/tests/*",
+    "*/admin.py",
+    "*/apps.py",
+]

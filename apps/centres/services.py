@@ -14,7 +14,9 @@ from .models import CentreTest, DiagnosticCentre, DiagnosticTest
 logger = logging.getLogger(__name__)
 
 
-def _save_or_conflict(instance: models.Model, conflict: type[Exception], **fields):
+def _save_or_conflict(
+    instance: models.Model, conflict: type[Exception], **fields
+) -> models.Model:
     """Apply fields and save; a unique-constraint violation becomes a 409 domain error."""
     for name, value in fields.items():
         setattr(instance, name, value)
@@ -32,6 +34,7 @@ def create_centre(**fields) -> DiagnosticCentre:
 
 
 def update_centre(centre: DiagnosticCentre, **fields) -> DiagnosticCentre:
+    """Update given centre fields (e.g. is_active=False to deactivate); 409 on duplicate."""
     return _save_or_conflict(centre, CentreAlreadyExists, **fields)
 
 
@@ -41,6 +44,7 @@ def create_test(**fields) -> DiagnosticTest:
 
 
 def update_test(test: DiagnosticTest, **fields) -> DiagnosticTest:
+    """Update given catalog test fields; 409 if the new code is taken."""
     return _save_or_conflict(test, TestCodeAlreadyExists, **fields)
 
 

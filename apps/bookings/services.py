@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def _validate_appointment_time(appointment_at: datetime) -> None:
+    """Appointment must be in the future and at most MAX_BOOKING_DAYS_AHEAD days away."""
     now = timezone.now()
     if appointment_at <= now:
         raise BusinessRuleViolation(

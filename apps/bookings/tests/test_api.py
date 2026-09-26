@@ -1,11 +1,11 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from apps.bookings.models import BookingStatus
+from apps.bookings.models import Booking, BookingStatus
 from apps.bookings.state_machine import transition
 from apps.bookings.tests.factories import BookingFactory
 from apps.centres.tests.factories import CentreTestFactory
@@ -137,6 +137,48 @@ def test_create_duplicate_booking_returns_409(auth_client, offering):
 
     assert response.status_code == 409
     assert_error_shape(response, "DUPLICATE_BOOKING")
+
+
+# --- Timezones ---
+
+
+def test_naive_appointment_time_is_interpreted_as_utc(auth_client, offering):
+    naive = (datetime.now(UTC) + timedelta(days=2)).replace(microsecond=0, tzinfo=None)
+
+    response = auth_client.post(
+        BOOKINGS_URL,
+        {
+            "centre_id": offering.centre_id,
+            "test_id": offering.test_id,
+            "appointment_at": naive.isoformat(),  # no offset
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201
+    assert response.json()["appointment_at"] == naive.isoformat() + "Z"
+
+
+def test_offset_appointment_time_is_stored_in_utc(auth_client, offering):
+    ist = timezone.get_fixed_timezone(330)  # +05:30
+    local = (datetime.now(ist) + timedelta(days=2)).replace(hour=9, minute=0, second=0,
+                                                            microsecond=0)
+
+    response = auth_client.post(
+        BOOKINGS_URL,
+        {
+            "centre_id": offering.centre_id,
+            "test_id": offering.test_id,
+            "appointment_at": local.isoformat(),  # e.g. 2026-09-29T09:00:00+05:30
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201
+    expected_utc = local.astimezone(UTC).replace(tzinfo=None).isoformat() + "Z"
+    assert response.json()["appointment_at"] == expected_utc  # 09:00 IST == 03:30Z
+    booking = Booking.objects.get(pk=response.json()["id"])
+    assert booking.appointment_at == local
 
 
 # --- List / retrieve ---

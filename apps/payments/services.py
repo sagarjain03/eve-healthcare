@@ -39,6 +39,7 @@ SIMULATED_DECLINE = "SIMULATED_DECLINE"
 
 
 def _new_reference() -> str:
+    """Public payment id: "pay_" + 32 hex chars (unguessable, URL-safe)."""
     return f"pay_{uuid.uuid4().hex}"
 
 
@@ -109,6 +110,7 @@ def _find_idempotent_replay(user: User, idempotency_key: str, booking_id: int) -
 
 
 def _decide_outcome(outcome: str | None) -> str:
+    """Use the requested outcome, or pick SUCCESS/FAILED with PAYMENT_SUCCESS_RATE."""
     if outcome is not None:
         return outcome
     success = random.random() < settings.PAYMENT_SUCCESS_RATE
@@ -118,6 +120,7 @@ def _decide_outcome(outcome: str | None) -> str:
 def _create_payment_locked(
     *, user: User, booking_id: int, outcome: str | None, idempotency_key: str | None
 ) -> Payment:
+    """Lock the user's booking, check it can be paid, create the payment, apply the outcome."""
     try:
         booking = Booking.objects.select_for_update().filter(user=user).get(id=booking_id)
     except Booking.DoesNotExist as exc:

@@ -114,11 +114,11 @@ Estimated total: ~4–6 hours of focused work (vibe-coded).
 
 ## Phase 7 — Edge-Case Hardening & Test Review
 **Goal:** Nothing in `Prd.md` §F6 is untested.
-- [ ] Go through §F6 table row by row; add missing tests.
-- [ ] Check every error response follows the standard shape.
-- [ ] Check no N+1 queries on list endpoints (`django_assert_num_queries`).
-- [ ] Check all list endpoints paginated.
-- [ ] Add test coverage report (`pytest --cov`) — aim ≥ 85% on services.
+- [x] Go through §F6 table row by row; add missing tests.
+- [x] Check every error response follows the standard shape.
+- [x] Check no N+1 queries on list endpoints (`django_assert_num_queries`).
+- [x] Check all list endpoints paginated.
+- [x] Add test coverage report (`pytest --cov`) — aim ≥ 85% on services.
 
 **Done when:** all F6 rows have a passing test.
 **Commit:** `test: edge case coverage`
