@@ -159,11 +159,14 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_THROTTLE_RATES': {
         'auth': '10/min',
+        'payments': '20/min',
     },
 }
 
 # Business rules
 MAX_BOOKING_DAYS_AHEAD = env.int('MAX_BOOKING_DAYS_AHEAD', default=90)
+# Probability (0-1) that a payment without an explicit outcome succeeds
+PAYMENT_SUCCESS_RATE = env.float('PAYMENT_SUCCESS_RATE', default=0.8)
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=env.int('JWT_ACCESS_MINUTES', default=30)),
@@ -176,4 +179,9 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'Diagnostic centre booking system with simulated payments.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    # Bookings and payments both have a "status" field; give each choice set a stable name
+    'ENUM_NAME_OVERRIDES': {
+        'BookingStatusEnum': 'apps.bookings.models.BookingStatus',
+        'PaymentStatusEnum': 'apps.payments.models.PaymentStatus',
+    },
 }

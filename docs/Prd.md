@@ -59,11 +59,15 @@ This is an internship assignment for EVE Healthcare (SDE Intern — Backend). Ev
 - Statuses: `PENDING`, `CONFIRMED`, `FAILED`, `CANCELLED`.
 
 ### F4. Simulated Payment
-- `POST /payments/` — `{booking_id, outcome?}` where `outcome` is `SUCCESS` | `FAILED`.
-  - If `outcome` omitted → random result using `PAYMENT_SUCCESS_RATE` setting (default 0.8).
-  - Supports optional `Idempotency-Key` header: same key → same response, no second payment.
-  - Creates a `Payment` record with a unique `reference` (e.g. `pay_<uuid>`).
-  - SUCCESS → booking `CONFIRMED`; FAILED → booking `FAILED`.
+- `POST /payments/` — `{booking_id, outcome?}` where `outcome` is `SUCCESS` | `FAILED` | `PENDING`.
+  - `SUCCESS` → payment `SUCCESS`, booking `CONFIRMED`.
+  - `FAILED` → payment `FAILED`, booking `FAILED` (user may retry with a new payment).
+  - `PENDING` → payment and booking stay `PENDING`; the result arrives later via the webhook (F5). Simulates an async provider.
+  - If `outcome` omitted → random `SUCCESS`/`FAILED` using `PAYMENT_SUCCESS_RATE` setting (default 0.8).
+  - Only `PENDING`/`FAILED` bookings with a future appointment can be paid; at most one `PENDING`/`SUCCESS` payment per booking.
+  - Supports optional `Idempotency-Key` header (per user, bound to one booking): same key → original payment (200), no second payment.
+  - Creates a `Payment` record with a unique `reference` (`pay_<uuid4 hex>`); amount always comes from the booking.
+- `GET /payments/` — own payments (filter `?booking=<id>`).
 - `GET /payments/{reference}/` — own payment detail.
 
 ### F5. Payment Webhook

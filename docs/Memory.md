@@ -4,9 +4,9 @@
 > Keep entries short. Newest entries on top in the Log.
 
 ## Current Status
-- **Current phase:** Phase 4 complete
+- **Current phase:** Phase 5 complete
 - **Currently working on (file):** —
-- **Next step:** Start Phase 5 — Simulated Payments (`Payment` model, `create_payment`, `apply_payment_result`)
+- **Next step:** Start Phase 6 — Idempotent Webhook (`WebhookEvent` model, HMAC signature, `POST /payments/webhook/` reusing `apply_payment_result`)
 
 ## Completed Phases
 - [x] Phase 0 — Project Setup (commit: chore: project setup with django, drf and postgres)
@@ -14,8 +14,24 @@
 - [x] Phase 2 — Authentication APIs (commit: feat: jwt authentication)
 - [x] Phase 3 — Centres & Tests catalog (commit: feat: diagnostic centres and tests catalog)
 - [x] Phase 4 — Bookings with state machine (commit: feat: booking system with state machine)
+- [x] Phase 5 — Simulated Payments (commit: feat: simulated payment service)
 
 ## Files Created / Modified
+### Phase 5
+- apps/payments/models.py — `PaymentStatus`, `Payment` (table `payments`; amount > 0, one PENDING/SUCCESS per booking, unique (user, idempotency_key) when key set)
+- apps/payments/migrations/0001_initial.py
+- apps/payments/services.py — `PAYMENT_TRANSITIONS`, `apply_payment_result` (only payment → booking mapping), `create_payment`
+- apps/payments/serializers.py — `PaymentCreateSerializer`, `PaymentSerializer`
+- apps/payments/filters.py — `PaymentFilter` (`?booking=`)
+- apps/payments/views.py — `PaymentViewSet` (create/list/retrieve by reference, Idempotency-Key header, create-only throttle)
+- apps/payments/urls.py — SimpleRouter mounted at `payments/` in config/urls.py
+- apps/payments/admin.py — view-only (no add/change/delete)
+- apps/payments/tests/ — factories.py, test_models.py, test_services.py, test_api.py; old stub tests.py deleted
+- config/settings/base.py — `PAYMENT_SUCCESS_RATE`, `payments: 20/min` throttle, `ENUM_NAME_OVERRIDES` (schema)
+- .env, .env.example — `PAYMENT_SUCCESS_RATE=0.8`
+- docs/Prd.md — F4 updated (PENDING outcome, rules, list endpoint)
+- docs/Phases.md — ticked Phase 5
+
 ### Phase 4
 - apps/bookings/models.py — `BookingStatus`, `Booking` (table `bookings`; amount > 0 check, partial unique on active slot, `(user, -created_at)` index)
 - apps/bookings/migrations/0001_initial.py
@@ -127,14 +143,26 @@
 - **Admin can't edit status or amount** (read-only) and can't add bookings in admin — bookings go through the service + state machine.
 - `DomainError` accepts an optional `code=` so one exception class (e.g. `BusinessRuleViolation`) can carry specific codes.
 - Booking ids in URLs must be digits (`lookup_value_regex = r"\d+"`).
+- `POST /payments/` `outcome`: `SUCCESS` → booking CONFIRMED; `FAILED` → booking FAILED (retry allowed); **`PENDING` → both stay PENDING until the webhook settles it (simulates an async provider)**; omitted → random SUCCESS/FAILED via `PAYMENT_SUCCESS_RATE` (default 0.8).
+- **One active payment per booking**: DB allows at most one PENDING or SUCCESS payment per booking; any number of FAILED ones (retries). Paying while one is PENDING → 409 `PAYMENT_IN_PROGRESS`; paying CONFIRMED/CANCELLED → 409 `BOOKING_NOT_PAYABLE`; past appointment → 400.
+- **Payments are terminal after SUCCESS/FAILED** (`PENDING → SUCCESS|FAILED` only). A retry is a new payment row. Re-applying the same status is a no-op.
+- `apply_payment_result()` is the **only** code that maps a payment result onto a booking (webhook will reuse it); it calls `state_machine.transition`.
+- **Idempotency-Key** (optional header, ≤ 100 chars): scoped **per user** and **bound to one booking**. Same key + same booking → original payment, 200 (created=False). Same key + different booking → 409 `IDEMPOTENCY_KEY_REUSED`. Race on the key is caught via the DB constraint name.
+- **Reference format** `pay_` + uuid4 hex (32 chars). Detail URL only matches `pay_[0-9a-f]{32}`, so it can never collide with `/payments/webhook/`.
+- **Payments throttle 20/min per user**, only on `POST /payments/` (reads not throttled).
+- Payment `amount` is copied from `booking.amount`; client-sent `amount`/`status` are ignored.
+- Schema: `ENUM_NAME_OVERRIDES` gives `BookingStatusEnum` / `PaymentStatusEnum` stable names (both models have `status`).
 - Shared fixtures live in a **root `conftest.py`**, not `tests/conftest.py`: pytest only applies a conftest to tests in its own folder or below, so fixtures in `tests/` were invisible to `apps/*/tests/`.
 
 ## Known Issues / TODO
+- **Decide in Phase 6:** a user can cancel a booking while its payment is still PENDING. A later webhook SUCCESS would then try CANCELLED → CONFIRMED and hit `InvalidStateTransition`. The webhook should record this (e.g. mark event IGNORED + log; refund out of scope) rather than 500/409 the provider.
+- Dev DB has a booking with a PENDING payment left for Phase 6 webhook testing (created by the Phase 5 live flow).
 - A non-numeric booking id (e.g. `/bookings/abc/`) doesn't match any URL, so Django's default 404 page is returned instead of the JSON error shape. Revisit in Phase 7 (a JSON `handler404` would cover every unmatched URL).
 - No superuser yet — developer runs `uv run python manage.py createsuperuser` manually.
 - If `uv run pytest` fails with "uv trampoline failed to canonicalize script path", regenerate the launchers: `uv sync --reinstall-package pytest --reinstall-package django`.
 
 ## Log
+- 2026-09-27 — Phase 5 finished: Payment model + constraints, create_payment / apply_payment_result, payments API with Idempotency-Key + throttle, admin. Verified: check ✅, makemigrations --check ✅, pytest 156 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live FAILED → FAILED booking → SUCCESS → CONFIRMED → pay again 409 → key replay 200 same reference ✅, PENDING payment left for Phase 6 ✅. Grep: `booking.status =` only in state_machine.py; `payment.status =` only in apply_payment_result ✅.
 - 2026-09-27 — Phase 4 finished: Booking model + constraints, state machine, create/cancel services, bookings API, admin. Verified: check ✅, makemigrations --check ✅, pytest 117 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live signup → book → list → cancel → cancel again (409) ✅, grep: `booking.status =` only in state_machine.py ✅.
 - 2026-09-27 — Phase 3 finished: centres/tests/offerings catalog, filters, admin, idempotent seed. Fixed handler returning `ERROR` for Django Http404. Verified: check ✅, makemigrations --check ✅, seed_data ×2 (2nd run creates nothing) ✅, pytest 64 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live /centres/ endpoints ✅.
 - 2026-09-27 — Phase 2 finished: signup/login/refresh/me with JWT, auth throttle, factories + shared fixtures. Verified: check ✅, makemigrations --check ✅, pytest 32 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live signup → login → /auth/me/ ✅.

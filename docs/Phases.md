@@ -85,13 +85,13 @@ Estimated total: ~4–6 hours of focused work (vibe-coded).
 
 ## Phase 5 — Simulated Payments
 **Goal:** `POST /payments/` updates the booking.
-- [ ] `Payment` model (unique reference, one SUCCESS per booking constraint, unique user+idempotency_key).
-- [ ] `services.create_payment()` — lock booking, check status, decide outcome, create payment.
-- [ ] `services.apply_payment_result()` — the **single** function that maps payment status → booking status (used again by webhook).
-- [ ] `Idempotency-Key` header support.
-- [ ] Endpoints: `POST /payments/`, `GET /payments/{reference}/`.
-- [ ] Throttle on payments.
-- [ ] Tests: success → CONFIRMED, failed → FAILED, retry after FAILED → CONFIRMED, pay CONFIRMED booking (409), pay CANCELLED (409), other user's booking (404), invalid booking id (404/400), same Idempotency-Key twice returns same payment, random outcome (mocked).
+- [x] `Payment` model (unique reference, one SUCCESS per booking constraint, unique user+idempotency_key).
+- [x] `services.create_payment()` — lock booking, check status, decide outcome, create payment.
+- [x] `services.apply_payment_result()` — the **single** function that maps payment status → booking status (used again by webhook).
+- [x] `Idempotency-Key` header support.
+- [x] Endpoints: `POST /payments/`, `GET /payments/{reference}/`.
+- [x] Throttle on payments.
+- [x] Tests: success → CONFIRMED, failed → FAILED, retry after FAILED → CONFIRMED, pay CONFIRMED booking (409), pay CANCELLED (409), other user's booking (404), invalid booking id (404/400), same Idempotency-Key twice returns same payment, random outcome (mocked).
 
 **Done when:** booking → pay → confirmed flow works end-to-end.
 **Commit:** `feat: simulated payment service`
