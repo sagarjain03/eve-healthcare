@@ -1,0 +1,1 @@
+Before any task, read docs/Rules.md, docs/Prd.md, docs/Architecture.md, docs/Phases.md and docs/memory.md. Work one phase at a time and update docs/memory.md after every task.
