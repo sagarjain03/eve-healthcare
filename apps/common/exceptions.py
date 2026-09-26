@@ -12,9 +12,12 @@ class DomainError(Exception):
     code = "BAD_REQUEST"
     message = "Bad request."
 
-    def __init__(self, message: str | None = None, details: dict | None = None):
+    def __init__(
+        self, message: str | None = None, details: dict | None = None, code: str | None = None
+    ):
         self.message = message or self.message
         self.details = details or {}
+        self.code = code or self.code  # optional per-raise code, e.g. "TEST_NOT_OFFERED"
         super().__init__(self.message)
 
 
@@ -48,6 +51,11 @@ class CentreAlreadyExists(Conflict):
 class TestCodeAlreadyExists(Conflict):
     code = "TEST_CODE_ALREADY_EXISTS"
     message = "A test with this code already exists."
+
+
+class DuplicateBooking(Conflict):
+    code = "DUPLICATE_BOOKING"
+    message = "You already have an active booking for this test, centre and time."
 
 
 class BusinessRuleViolation(DomainError):

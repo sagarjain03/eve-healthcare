@@ -4,17 +4,33 @@
 > Keep entries short. Newest entries on top in the Log.
 
 ## Current Status
-- **Current phase:** Phase 3 complete
+- **Current phase:** Phase 4 complete
 - **Currently working on (file):** —
-- **Next step:** Start Phase 4 — Bookings (model, state machine, create/cancel services, endpoints)
+- **Next step:** Start Phase 5 — Simulated Payments (`Payment` model, `create_payment`, `apply_payment_result`)
 
 ## Completed Phases
 - [x] Phase 0 — Project Setup (commit: chore: project setup with django, drf and postgres)
 - [x] Phase 1 — Common Layer + Custom User (commit: feat: common utilities and custom user model)
 - [x] Phase 2 — Authentication APIs (commit: feat: jwt authentication)
 - [x] Phase 3 — Centres & Tests catalog (commit: feat: diagnostic centres and tests catalog)
+- [x] Phase 4 — Bookings with state machine (commit: feat: booking system with state machine)
 
 ## Files Created / Modified
+### Phase 4
+- apps/bookings/models.py — `BookingStatus`, `Booking` (table `bookings`; amount > 0 check, partial unique on active slot, `(user, -created_at)` index)
+- apps/bookings/migrations/0001_initial.py
+- apps/bookings/state_machine.py — `ALLOWED_TRANSITIONS`, `can_transition`, `transition` (only place that sets `booking.status`)
+- apps/bookings/services.py — `create_booking`, `cancel_booking`
+- apps/bookings/serializers.py — `BookingCreateSerializer`, `BookingSerializer` (nested centre/test)
+- apps/bookings/filters.py — `BookingFilter` (`?status=` ChoiceFilter → 400 on bad value)
+- apps/bookings/views.py — `BookingViewSet` (list/retrieve/create + `POST /bookings/{id}/cancel/`)
+- apps/bookings/urls.py — SimpleRouter, mounted at root in config/urls.py
+- apps/bookings/admin.py — read-only status/amount, no "add" in admin
+- apps/bookings/tests/ — factories.py, test_state_machine.py, test_services.py, test_api.py; old stub tests.py deleted
+- apps/common/exceptions.py — `DuplicateBooking`; `DomainError(..., code=...)` optional per-raise code
+- config/settings/base.py, .env, .env.example — `MAX_BOOKING_DAYS_AHEAD` (default 90)
+- docs/Phases.md — ticked Phase 4
+
 ### Phase 3
 - apps/centres/models.py — `DiagnosticCentre`, `DiagnosticTest`, `CentreTest` (tables `diagnostic_centres`, `diagnostic_tests`, `centre_tests` as in Architecture §4)
 - apps/centres/migrations/0001_initial.py — the three tables + constraints
@@ -100,13 +116,26 @@
 - `?test=` filter accepts numeric id or code (case-insensitive) and matches only centres with an active offering; `.distinct()` avoids duplicates.
 - Offering upsert: `POST /centres/{id}/tests/` → 201 created / 200 updated. Inactive test → 400 `BUSINESS_RULE_VIOLATION`. `CentreTest.centre` is CASCADE, `CentreTest.test` is PROTECT.
 - `seed_data` is idempotent (get_or_create / update_or_create; offerings' prices re-synced). Dev admin = `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` (defaults `admin@eve.local` / `Admin@12345`, **dev only**); an existing admin's password is never overwritten.
+- Booking `amount` is a **snapshot** of `CentreTest.price` at creation; later price changes don't touch existing bookings. Client-sent `amount`/`status` are ignored.
+- Other users' bookings → **404 `BOOKING_NOT_FOUND`** (never 403), so their existence isn't leaked. Querysets are always filtered by `request.user`.
+- **CONFIRMED bookings can be cancelled** (refunds are out of scope).
+- **Past appointments can't be cancelled** → 400 `APPOINTMENT_ALREADY_PASSED`.
+- **Re-booking the same slot is allowed** after the first booking is CANCELLED/FAILED (partial unique only covers PENDING/CONFIRMED).
+- **FAILED → FAILED is allowed** so repeated failed payment attempts don't error.
+- Invalid/inactive centre or test in the request body → **400** (`CENTRE_NOT_AVAILABLE`, `TEST_NOT_OFFERED`), not 404 — they're input fields, not the URL resource.
+- Appointment must be in the future and ≤ `MAX_BOOKING_DAYS_AHEAD` days (default 90) → 400 `APPOINTMENT_IN_PAST` / `APPOINTMENT_TOO_FAR`.
+- **Admin can't edit status or amount** (read-only) and can't add bookings in admin — bookings go through the service + state machine.
+- `DomainError` accepts an optional `code=` so one exception class (e.g. `BusinessRuleViolation`) can carry specific codes.
+- Booking ids in URLs must be digits (`lookup_value_regex = r"\d+"`).
 - Shared fixtures live in a **root `conftest.py`**, not `tests/conftest.py`: pytest only applies a conftest to tests in its own folder or below, so fixtures in `tests/` were invisible to `apps/*/tests/`.
 
 ## Known Issues / TODO
+- A non-numeric booking id (e.g. `/bookings/abc/`) doesn't match any URL, so Django's default 404 page is returned instead of the JSON error shape. Revisit in Phase 7 (a JSON `handler404` would cover every unmatched URL).
 - No superuser yet — developer runs `uv run python manage.py createsuperuser` manually.
 - If `uv run pytest` fails with "uv trampoline failed to canonicalize script path", regenerate the launchers: `uv sync --reinstall-package pytest --reinstall-package django`.
 
 ## Log
+- 2026-09-27 — Phase 4 finished: Booking model + constraints, state machine, create/cancel services, bookings API, admin. Verified: check ✅, makemigrations --check ✅, pytest 117 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live signup → book → list → cancel → cancel again (409) ✅, grep: `booking.status =` only in state_machine.py ✅.
 - 2026-09-27 — Phase 3 finished: centres/tests/offerings catalog, filters, admin, idempotent seed. Fixed handler returning `ERROR` for Django Http404. Verified: check ✅, makemigrations --check ✅, seed_data ×2 (2nd run creates nothing) ✅, pytest 64 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live /centres/ endpoints ✅.
 - 2026-09-27 — Phase 2 finished: signup/login/refresh/me with JWT, auth throttle, factories + shared fixtures. Verified: check ✅, makemigrations --check ✅, pytest 32 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live signup → login → /auth/me/ ✅.
 - 2026-09-27 — Added DB-level case-insensitive unique constraint on User.email (migration 0002) + bypass-save test. pytest 15 passed ✅, ruff clean ✅.

@@ -70,13 +70,13 @@ Estimated total: ~4–6 hours of focused work (vibe-coded).
 
 ## Phase 4 — Bookings
 **Goal:** Users can create, list, view and cancel their own bookings.
-- [ ] `Booking` model + `BookingStatus` choices + partial unique constraint for active duplicates.
-- [ ] `state_machine.py` — `ALLOWED_TRANSITIONS` + `transition(booking, new_status)` raising `InvalidStateTransition`.
-- [ ] `services.create_booking()` — all validation rules from `Architecture.md` §3.2, amount snapshot.
-- [ ] `services.cancel_booking()` — with `select_for_update`.
-- [ ] Endpoints: `POST/GET /bookings/`, `GET /bookings/{id}/`, `POST /bookings/{id}/cancel/`.
-- [ ] Querysets always filtered by `request.user`.
-- [ ] Tests: create success (amount = server price), test not offered at centre, inactive centre, past date, too far ahead, duplicate active booking (409), other user's booking (404), non-existent id (404), cancel twice (409), unauthenticated (401), every state-machine transition (valid + invalid).
+- [x] `Booking` model + `BookingStatus` choices + partial unique constraint for active duplicates.
+- [x] `state_machine.py` — `ALLOWED_TRANSITIONS` + `transition(booking, new_status)` raising `InvalidStateTransition`.
+- [x] `services.create_booking()` — all validation rules from `Architecture.md` §3.2, amount snapshot.
+- [x] `services.cancel_booking()` — with `select_for_update`.
+- [x] Endpoints: `POST/GET /bookings/`, `GET /bookings/{id}/`, `POST /bookings/{id}/cancel/`.
+- [x] Querysets always filtered by `request.user`.
+- [x] Tests: create success (amount = server price), test not offered at centre, inactive centre, past date, too far ahead, duplicate active booking (409), other user's booking (404), non-existent id (404), cancel twice (409), unauthenticated (401), every state-machine transition (valid + invalid).
 
 **Done when:** full booking lifecycle (without payment) works and is tested.
 **Commit:** `feat: booking system with state machine`

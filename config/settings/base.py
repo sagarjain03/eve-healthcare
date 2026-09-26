@@ -162,6 +162,9 @@ REST_FRAMEWORK = {
     },
 }
 
+# Business rules
+MAX_BOOKING_DAYS_AHEAD = env.int('MAX_BOOKING_DAYS_AHEAD', default=90)
+
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=env.int('JWT_ACCESS_MINUTES', default=30)),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=env.int('JWT_REFRESH_DAYS', default=7)),
