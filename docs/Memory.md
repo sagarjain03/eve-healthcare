@@ -4,9 +4,9 @@
 > Keep entries short. Newest entries on top in the Log.
 
 ## Current Status
-- **Current phase:** Phase 8 complete
+- **Current phase:** Phase 9 complete — **project complete**
 - **Currently working on (file):** —
-- **Next step:** Start Phase 9 — README & submission (overview, run with/without Docker, curl walkthrough, schema + state machine diagrams, idempotency, assumptions from Decisions, future improvements incl. Redis/Celery)
+- **Next step:** Developer: replace `<GITHUB_USER>/<REPO>` in the README CI badge, commit, push to GitHub (CI runs on push), interview prep.
 
 ## Completed Phases
 - [x] Phase 0 — Project Setup (commit: chore: project setup with django, drf and postgres)
@@ -18,6 +18,7 @@
 - [x] Phase 6 — Idempotent Webhook (commit: feat: idempotent payment webhook)
 - [x] Phase 7 — Edge-case hardening & test review (commit: test: edge case coverage and consistent error handling)
 - [x] Phase 8 — Docker, structured logging, webhook retries, CI (commit: feat: docker, structured logging, webhook retries and ci)
+- [x] Phase 9 — README & submission (commit: docs: readme and submission)
 
 ## Coverage
 - Phase 8: **98% overall** (1043 stmts, 20 missed) — 223 tests. webhook.py 98%, logging.py / middleware.py / reprocess_webhooks 100%.
@@ -29,6 +30,10 @@
 - With **local-Docker defaults** (plain HTTP on localhost) 4 warnings remain **on purpose**: W004 (no HSTS), W008 (no SSL redirect), W012 / W016 (cookies not `Secure`) — turning these on without HTTPS would break login/admin over `http://localhost`. W018 (DEBUG) is gone: prod forces `DEBUG=False`.
 
 ## Files Created / Modified
+### Phase 9
+- README.md — full reviewer README (quick start, API table, e2e curl walkthrough, ER + state diagrams, constraints, webhook outcomes, errors, structure, security, assumptions, limitations, improvements); Python snippet formatted by `ruff format` (ruff also checks Markdown code blocks)
+- docs/Phases.md — Phase 9 ticked (push + interview prep left to developer)
+
 ### Phase 8
 - pyproject.toml, uv.lock — `whitenoise` (only new library)
 - config/settings/prod.py — DEBUG off, required ALLOWED_HOSTS, whitenoise + STORAGES, env-driven HTTPS settings, JSON logs
@@ -245,6 +250,7 @@
 - If `uv run pytest` fails with "uv trampoline failed to canonicalize script path", regenerate the launchers: `uv sync --reinstall-package pytest --reinstall-package django`.
 
 ## Log
+- 2026-09-27 — Phase 9 finished, **project complete**. README verified from a clean clone (`git clone .` → temp folder; original containers stopped to free ports 8000/5433, then restarted): Quick start exactly as written → db + web healthy, /health/ 200, /api/docs/ 200; README e2e bash block extracted verbatim and run in Git Bash → every step matched (FAILED → SUCCESS 201 → replay 200 same reference → 409 BOOKING_NOT_PAYABLE → PENDING → webhook ×3 = 1 PROCESSED + 2 DUPLICATE → CONFIRMED). Fixed in README: added `-w '\n'` so printed responses don't run together. Temp clone, its containers, volume and image removed. Submission checks: no .env/.venv/staticfiles/pycache/coverage tracked, real secrets not in repo, README doc links resolve, both Mermaid diagrams render with mermaid-cli. Final: pytest 223 passed / 98% ✅, ruff check ✅, ruff format --check ✅ (after formatting README's Python block), makemigrations --check ✅, spectacular ✅.
 - 2026-09-27 — Phase 8 finished: prod settings + whitenoise, Docker (web+db, healthchecks), JSON logging + request ids, webhook FAILED/retry + reprocess_webhooks, CI, one-time ruff format. Verified: check ✅, makemigrations --check ✅, pytest 223 passed / 98% ✅, ruff check + format ✅, spectacular ✅, check --deploy prod+HTTPS env 0 issues ✅, throttle tests under prod settings ✅. Docker: down -v → up --build → db + web healthy; logs show migrate → seed → gunicorn with JSON lines; /health/ 200, /api/docs/ 200, /admin/login/ 200, hashed admin CSS 200 via whitenoise; /nope/ JSON 404; signup → login → book → pay PENDING → send_webhook ×3 (1 PROCESSED + 2 DUPLICATE) → booking CONFIRMED; JSON logs carry request_id + payment_reference ✅. Dev DB was reset by `down -v` and re-seeded by the container.
 - 2026-09-27 — Phase 7 finished: EdgeCases.md matrix (all F6 rows tested), JSON 404/500 handlers, standard 503, 429 wait, new tests (expired JWT, concurrent payments, races, timezone, query counts, page_size cap, seed idempotency), coverage config. Verified: check ✅, check --deploy (5 warnings, for Phase 8), makemigrations --check ✅, pytest 206 passed, 98% coverage ✅, ruff clean ✅, spectacular --fail-on-warn ✅. .env confirmed untracked by git ✅.
 - 2026-09-27 — Phase 6 finished: WebhookEvent + refund_required, HMAC signature, idempotent process_webhook_event, webhook view, send_webhook.py. Verified: check ✅, makemigrations --check ✅, pytest 178 passed (incl. 5-thread concurrency) ✅, ruff clean ✅, spectacular --fail-on-warn ✅. Live on booking #3: same SUCCESS event ×5 → 1 PROCESSED + 4 DUPLICATE, booking CONFIRMED, 1 row with attempts=5 ✅; new FAILED event → IGNORED terminal_payment ✅; bad signature → 401 ✅; wrong amount → 400 AMOUNT_MISMATCH ✅. Grep: booking status only via state_machine; payment → booking only via apply_payment_result ✅.
