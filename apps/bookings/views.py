@@ -34,9 +34,7 @@ from .services import cancel_booking, create_booking
         },
     ),
 )
-class BookingViewSet(
-    mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
-):
+class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     permission_classes = (IsAuthenticated,)
     http_method_names = ("get", "post", "head", "options")
     filter_backends = (DjangoFilterBackend,)

@@ -1,0 +1,15 @@
+.venv
+.git
+.gitattributes
+.gitignore
+.github
+**/__pycache__
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+.env
+staticfiles
+docs
+.claude
+.vscode

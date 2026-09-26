@@ -22,23 +22,55 @@ TESTS = [
 # (name, address, city, pincode, {test_code: price in INR})
 CENTRES = [
     (
-        "HealthFirst Diagnostics", "12 Connaught Place", "Delhi", "110001",
-        {"CBC": "350", "LFT": "750", "KFT": "700", "LIPID": "600", "TSH": "450",
-         "HBA1C": "550", "VITD": "1400", "XRAY-CHEST": "500"},
+        "HealthFirst Diagnostics",
+        "12 Connaught Place",
+        "Delhi",
+        "110001",
+        {
+            "CBC": "350",
+            "LFT": "750",
+            "KFT": "700",
+            "LIPID": "600",
+            "TSH": "450",
+            "HBA1C": "550",
+            "VITD": "1400",
+            "XRAY-CHEST": "500",
+        },
     ),
     (
-        "CarePlus Labs", "45 Lajpat Nagar II", "Delhi", "110024",
+        "CarePlus Labs",
+        "45 Lajpat Nagar II",
+        "Delhi",
+        "110024",
         {"CBC": "299", "LFT": "690", "LIPID": "549", "TSH": "399", "VITD": "1199"},
     ),
     (
-        "Metro Diagnostics", "88 Linking Road, Bandra West", "Mumbai", "400050",
-        {"CBC": "400", "KFT": "850", "LIPID": "700", "HBA1C": "650", "VITD": "1600",
-         "XRAY-CHEST": "650"},
+        "Metro Diagnostics",
+        "88 Linking Road, Bandra West",
+        "Mumbai",
+        "400050",
+        {
+            "CBC": "400",
+            "KFT": "850",
+            "LIPID": "700",
+            "HBA1C": "650",
+            "VITD": "1600",
+            "XRAY-CHEST": "650",
+        },
     ),
     (
-        "Apex Pathology", "21 100 Feet Road, Indiranagar", "Bengaluru", "560038",
-        {"CBC": "320", "LFT": "720", "KFT": "680", "TSH": "420", "HBA1C": "499",
-         "XRAY-CHEST": "550"},
+        "Apex Pathology",
+        "21 100 Feet Road, Indiranagar",
+        "Bengaluru",
+        "560038",
+        {
+            "CBC": "320",
+            "LFT": "720",
+            "KFT": "680",
+            "TSH": "420",
+            "HBA1C": "499",
+            "XRAY-CHEST": "550",
+        },
     ),
 ]
 
@@ -54,12 +86,17 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS("Seed complete:"))
         self.stdout.write(f"  admin user : {'created' if admin_created else 'already existed'}")
-        self.stdout.write(f"  tests      : {tests_created} created, "
-                          f"{len(TESTS) - tests_created} already existed")
-        self.stdout.write(f"  centres    : {centres_created} created, "
-                          f"{len(CENTRES) - centres_created} already existed")
-        self.stdout.write(f"  offerings  : {offerings_created} created, "
-                          f"{offerings_updated} already existed (price synced)")
+        self.stdout.write(
+            f"  tests      : {tests_created} created, {len(TESTS) - tests_created} already existed"
+        )
+        self.stdout.write(
+            f"  centres    : {centres_created} created, "
+            f"{len(CENTRES) - centres_created} already existed"
+        )
+        self.stdout.write(
+            f"  offerings  : {offerings_created} created, "
+            f"{offerings_updated} already existed (price synced)"
+        )
 
     def _seed_admin(self) -> bool:
         User = get_user_model()

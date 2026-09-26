@@ -50,7 +50,5 @@ class OfferingWriteSerializer(serializers.Serializer):
     test_id = serializers.PrimaryKeyRelatedField(
         queryset=DiagnosticTest.objects.all(), source="test"
     )
-    price = serializers.DecimalField(
-        max_digits=10, decimal_places=2, min_value=Decimal("0.01")
-    )
+    price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
     is_active = serializers.BooleanField(default=True)

@@ -9,9 +9,7 @@ from .models import User
 logger = logging.getLogger(__name__)
 
 
-def register_user(
-    *, email: str, password: str, full_name: str, phone: str | None = None
-) -> User:
+def register_user(*, email: str, password: str, full_name: str, phone: str | None = None) -> User:
     """Create a new user. Email is unique case-insensitively; a duplicate raises 409."""
     email = email.strip().lower()
     if User.objects.filter(email__iexact=email).exists():

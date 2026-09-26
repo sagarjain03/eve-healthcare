@@ -278,7 +278,9 @@ def test_normal_user_create_test_returns_403(auth_client):
 
 
 def test_admin_create_test_returns_201_with_uppercase_code(admin_client):
-    response = admin_client.post(TESTS_URL, {"code": "vitb12", "name": "Vitamin B12"}, format="json")
+    response = admin_client.post(
+        TESTS_URL, {"code": "vitb12", "name": "Vitamin B12"}, format="json"
+    )
 
     assert response.status_code == 201
     assert response.json()["code"] == "VITB12"

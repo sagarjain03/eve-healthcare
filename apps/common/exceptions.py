@@ -60,6 +60,14 @@ class DuplicateBooking(Conflict):
     message = "You already have an active booking for this test, centre and time."
 
 
+class WebhookProcessingError(DomainError):
+    """Unexpected failure while applying a webhook event; the event is stored as FAILED."""
+
+    status_code = 500
+    code = "INTERNAL_ERROR"
+    message = "The event could not be processed and will be retried."
+
+
 class BusinessRuleViolation(DomainError):
     status_code = 400
     code = "BUSINESS_RULE_VIOLATION"
@@ -92,7 +100,11 @@ def custom_exception_handler(exc, context):
         return None
 
     if isinstance(exc, drf_exceptions.ValidationError):
-        details = response.data if isinstance(response.data, dict) else {"non_field_errors": response.data}
+        details = (
+            response.data
+            if isinstance(response.data, dict)
+            else {"non_field_errors": response.data}
+        )
         response.data = _error_body("VALIDATION_ERROR", "Invalid input.", details)
     else:
         code = getattr(exc, "default_code", "error").upper()

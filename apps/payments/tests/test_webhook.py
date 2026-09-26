@@ -9,6 +9,7 @@ from django.urls import resolve
 
 from apps.bookings.models import BookingStatus
 from apps.bookings.state_machine import transition
+from apps.payments import webhook
 from apps.payments.models import PaymentStatus, WebhookEvent, WebhookEventStatus
 from apps.payments.tests.factories import PaymentFactory
 from apps.payments.views import WebhookView
@@ -257,6 +258,59 @@ def test_webhook_is_not_throttled(api_client, payment):
 
 def test_webhook_url_routes_to_webhook_view_not_payment_detail():
     assert resolve(WEBHOOK_URL).func.view_class is WebhookView
+
+
+# --- Unexpected failures + retries ---
+
+
+def fail_once(monkeypatch):
+    """Make apply_payment_result raise on its first call only (e.g. a transient DB hiccup)."""
+    real_apply = webhook.apply_payment_result
+    calls = []
+
+    def flaky(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise RuntimeError("transient failure")
+        return real_apply(**kwargs)
+
+    monkeypatch.setattr(webhook, "apply_payment_result", flaky)
+
+
+def test_unexpected_error_returns_500_stores_failed_event_and_changes_nothing(
+    api_client, payment, monkeypatch
+):
+    fail_once(monkeypatch)
+
+    response = post_webhook(api_client, event_for(payment, "SUCCESS"))
+
+    assert response.status_code == 500
+    assert_error_shape(response, "INTERNAL_ERROR")
+    event = WebhookEvent.objects.get()
+    assert (event.status, event.note, event.attempts) == (
+        WebhookEventStatus.FAILED,
+        "RuntimeError",
+        1,
+    )
+    assert reload(payment).status == PaymentStatus.PENDING
+    assert reload(payment.booking).status == BookingStatus.PENDING
+
+
+def test_resending_a_failed_event_processes_it(api_client, payment, monkeypatch):
+    fail_once(monkeypatch)
+    payload = event_for(payment, "SUCCESS")
+    post_webhook(api_client, payload)
+
+    response = post_webhook(api_client, payload)
+
+    assert response.status_code == 200
+    assert response.json()["result"] == "PROCESSED"
+    event = WebhookEvent.objects.get()
+    assert (event.status, event.attempts) == (WebhookEventStatus.PROCESSED, 2)
+    assert reload(payment.booking).status == BookingStatus.CONFIRMED
+
+    # ...and after that it's a normal duplicate again
+    assert post_webhook(api_client, payload).json()["result"] == "DUPLICATE"
 
 
 # --- Concurrency ---

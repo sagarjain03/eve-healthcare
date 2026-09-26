@@ -127,13 +127,13 @@ Estimated total: ~4–6 hours of focused work (vibe-coded).
 
 ## Phase 8 — Docker & Bonus Engineering
 **Goal:** One-command run + selected bonuses.
-- [ ] `Dockerfile` (python:3.12-slim, non-root user, gunicorn).
-- [ ] `docker-compose.yml`: `web` + `db` (healthcheck), web runs migrate + seed on start (entrypoint script).
-- [ ] Structured JSON logging (`apps/common/logging.py`).
-- [ ] Rate limiting verified (auth, payments).
-- [ ] Webhook retry handling: events stored as `FAILED` with error + attempts; management command `reprocess_webhooks` retries them.
-- [ ] (Optional, only if time) Redis cache for `GET /centres/` with invalidation on admin write.
-- [ ] (Optional, only if time) Celery for async webhook processing.
+- [x] `Dockerfile` (python:3.12-slim, non-root user, gunicorn).
+- [x] `docker-compose.yml`: `web` + `db` (healthcheck), web runs migrate + seed on start (entrypoint script).
+- [x] Structured JSON logging (`apps/common/logging.py`).
+- [x] Rate limiting verified (auth, payments).
+- [x] Webhook retry handling: events stored as `FAILED` with error + attempts; management command `reprocess_webhooks` retries them.
+- [ ] ~~(Optional) Redis cache for `GET /centres/`~~ — **skipped by decision** (not needed at this load; README "Future improvements").
+- [ ] ~~(Optional) Celery for async webhook processing~~ — **skipped by decision** (FAILED + `reprocess_webhooks` covers retries; README "Future improvements").
 
 **Done when:** fresh clone → `cp .env.example .env` → `docker compose up --build` → Swagger works.
 **Commit:** `feat: docker, structured logging and webhook retries`

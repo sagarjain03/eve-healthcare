@@ -44,6 +44,8 @@ def test_same_user_same_idempotency_key_raises_integrity_error():
 def test_different_users_can_use_the_same_idempotency_key():
     PaymentFactory(idempotency_key="shared-key")
 
-    second = PaymentFactory(booking=BookingFactory(user=UserFactory()), idempotency_key="shared-key")
+    second = PaymentFactory(
+        booking=BookingFactory(user=UserFactory()), idempotency_key="shared-key"
+    )
 
     assert second.pk is not None

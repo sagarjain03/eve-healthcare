@@ -12,11 +12,15 @@
 | Config | `django-environ` | Settings from `.env` |
 | API docs | `drf-spectacular` | OpenAPI 3 + Swagger UI |
 | Filtering | `django-filter` | Query filters on list endpoints |
-| Tests | `pytest`, `pytest-django`, `factory-boy` | Fast, readable tests |
+| Tests | `pytest`, `pytest-django`, `pytest-cov`, `factory-boy` | Fast, readable tests + coverage |
 | Lint/format | `ruff` | One tool for lint + format |
-| Container | Docker + docker-compose | One-command setup |
+| Dependencies | `uv` (`pyproject.toml` + `uv.lock`) | Fast, reproducible installs (also in Docker/CI) |
+| Container | Docker + docker-compose (`db` + `web`) | One-command setup |
 | Server | `gunicorn` (in Docker) | Production-style WSGI server |
-| Optional | `redis`, `django-redis`, `celery` | Only in bonus phase |
+| Static files | `whitenoise` | Serves admin/Swagger assets from gunicorn, no nginx needed |
+| Logging | stdlib `logging` + `apps/common/logging.py` | JSON lines with request id (no extra library) |
+| CI | GitHub Actions | ruff, format check, migrations check, pytest + coverage on Postgres |
+| Not used | Redis, Celery | Not needed at this load; listed as future improvements |
 
 ## 2. High-Level Architecture
 ```
@@ -83,23 +87,36 @@ POST /payments/webhook/ {event_id, payment_reference, status (SUCCESS|FAILED), a
                                                                    else 401 INVALID_SIGNATURE
   → validate payload                                               else 400 VALIDATION_ERROR
   → process_webhook_event():
-       event_id already stored?  → attempts += 1, 200 DUPLICATE (no change)
+       event_id stored as PROCESSED/IGNORED? → attempts += 1, 200 DUPLICATE (no change)
+         (stored as FAILED → NOT a duplicate: it is processed again below)
        payment = Payment by reference (plain read)                 else 404 PAYMENT_NOT_FOUND
        transaction.atomic():
          lock booking, THEN lock payment      (same order as create_payment → no deadlock)
          amount == payment.amount?                                 else 400 AMOUNT_MISMATCH
-         savepoint: WebhookEvent.create(event_id UNIQUE)
-           IntegrityError (concurrent twin won) → attempts += 1, 200 DUPLICATE
+         claim the event row (select_for_update):
+           exists PROCESSED/IGNORED (twin finished first) → attempts += 1, 200 DUPLICATE
+           exists FAILED   → reuse it, attempts += 1 (retry)
+           missing         → savepoint create (UNIQUE event_id);
+                             IntegrityError (twin inserted) → 200 DUPLICATE
          payment already in this status  → event IGNORED "already_in_status"
          payment SUCCESS/FAILED (terminal) → event IGNORED "terminal_payment"
          else apply_payment_result()      → event PROCESSED
               booking CANCELLED + SUCCESS → payment SUCCESS, refund_required=True,
                                             booking stays CANCELLED, note "refund_required"
               booking CANCELLED + FAILED  → payment FAILED, booking stays CANCELLED
-         event.status / note / processed_at saved
+         event.status / note / attempts / processed_at saved
+       UNEXPECTED exception (not a DomainError):
+         whole transaction rolls back (booking/payment unchanged)
+         → new transaction: event saved/updated as FAILED, note = exception class, attempts += 1
+         → logged with traceback → 500 INTERNAL_ERROR (provider retries)
   → 200 {"event_id", "result": PROCESSED|IGNORED|DUPLICATE, "note"}
+
+manage.py reprocess_webhooks [--max-attempts 5] [--dry-run]
+  → re-runs every FAILED event from its stored payload through process_webhook_event()
+    (signature already verified on receipt); skips events with attempts >= max;
+    never touches PROCESSED/IGNORED events.
 ```
-Nothing is stored for 4xx failures (bad signature, bad payload, unknown reference, amount mismatch), so the provider can retry after the problem is fixed. Only events that reach processing get a `webhook_events` row. The payment always follows the provider; the booking follows the user (a cancelled booking is never re-confirmed).
+Nothing is stored for 4xx failures (bad signature, bad payload, unknown reference, amount mismatch), so the provider can retry after the problem is fixed. Only events that reach processing get a `webhook_events` row. The payment always follows the provider; the booking follows the user (a cancelled booking is never re-confirmed). Because processing is one transaction and the payment is terminal after SUCCESS/FAILED, a booking/payment can never change twice, even across retries.
 
 ### 3.5 Booking State Machine
 ```
@@ -172,11 +189,17 @@ Design notes:
 eve-diagnostics/
 ├── README.md
 ├── conftest.py                 # shared pytest fixtures (api_client, user, auth_client, admin_client)
-├── Dockerfile
-├── docker-compose.yml
-├── .env.example
+├── Dockerfile                  # python:3.12-slim + uv, collectstatic, non-root, HEALTHCHECK
+├── docker-compose.yml          # db (Postgres 16) + web (gunicorn, prod settings)
+├── docker/
+│   └── entrypoint.sh           # migrate → seed_data (if SEED_ON_START) → gunicorn
+├── .dockerignore
+├── .gitattributes              # *.sh eol=lf
+├── .github/
+│   └── workflows/ci.yml        # ruff, format check, migrations check, pytest + coverage
+├── .env.example                # every setting, commented
 ├── .gitignore
-├── pyproject.toml              # dependencies (uv) + ruff + pytest config
+├── pyproject.toml              # dependencies (uv) + ruff + pytest + coverage config
 ├── uv.lock                     # pinned dependency versions (uv)
 ├── manage.py
 ├── docs/                       # AI context files
@@ -184,14 +207,16 @@ eve-diagnostics/
 │   ├── Architecture.md
 │   ├── Rules.md
 │   ├── Phases.md
+│   ├── EdgeCases.md            # edge case → handler → tests matrix
 │   └── memory.md
 ├── config/                     # Django project
 │   ├── __init__.py
 │   ├── settings/
 │   │   ├── __init__.py
-│   │   ├── base.py
+│   │   ├── base.py             # shared; env-driven; LOGGING
 │   │   ├── local.py
-│   │   └── test.py
+│   │   ├── test.py
+│   │   └── prod.py             # DEBUG off, whitenoise, HTTPS settings from env
 │   ├── urls.py
 │   ├── wsgi.py
 │   └── asgi.py
@@ -201,7 +226,9 @@ eve-diagnostics/
 │   │   ├── exceptions.py       # domain exceptions + custom DRF exception handler
 │   │   ├── pagination.py
 │   │   ├── permissions.py      # IsAdminOrReadOnly
-│   │   ├── logging.py          # JSON log formatter
+│   │   ├── logging.py          # JsonFormatter + request_id contextvar
+│   │   ├── middleware.py       # RequestIdMiddleware (X-Request-ID)
+│   │   ├── views.py            # /health/ + JSON handler404/handler500
 │   │   └── models.py           # TimeStampedModel (abstract)
 │   ├── accounts/
 │   │   ├── models.py           # custom User + UserManager
@@ -231,16 +258,18 @@ eve-diagnostics/
 │   └── payments/
 │       ├── models.py           # Payment, WebhookEvent
 │       ├── services.py         # create_payment, apply_payment_result
-│       ├── webhook.py          # signature verify + process_webhook_event
+│       ├── webhook.py          # signature verify + process_webhook_event (+ FAILED/retry)
 │       ├── serializers.py
 │       ├── views.py
 │       ├── urls.py
 │       ├── admin.py
+│       ├── management/commands/reprocess_webhooks.py
 │       └── tests/
 ├── scripts/
 │   └── send_webhook.py         # simulates provider: signs + sends webhook (for demo)
-└── tests/                      # project-level tests (e.g. /health/)
-    └── test_health.py
+└── tests/                      # project-level tests (health, error shapes)
+    ├── test_health.py
+    └── test_error_responses.py
 ```
 
 ## 6. API Endpoints

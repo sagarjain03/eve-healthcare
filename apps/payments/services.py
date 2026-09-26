@@ -85,8 +85,9 @@ def apply_payment_result(
         payment.refund_required = new_status == PaymentStatus.SUCCESS
         payment.save(update_fields=["status", "failure_reason", "refund_required", "updated_at"])
         if payment.refund_required:
-            logger.warning("Payment succeeded for a cancelled booking; refund required",
-                           extra=log_extra)
+            logger.warning(
+                "Payment succeeded for a cancelled booking; refund required", extra=log_extra
+            )
             return ApplyResult.REFUND_REQUIRED
         logger.info("Payment result applied; booking stays cancelled", extra=log_extra)
         return ApplyResult.APPLIED
@@ -138,8 +139,9 @@ def _create_payment_locked(
             code="APPOINTMENT_ALREADY_PASSED",
         )
     if booking.payments.filter(status=PaymentStatus.PENDING).exists():
-        raise Conflict("A payment for this booking is already in progress.",
-                       code="PAYMENT_IN_PROGRESS")
+        raise Conflict(
+            "A payment for this booking is already in progress.", code="PAYMENT_IN_PROGRESS"
+        )
 
     decided = _decide_outcome(outcome)
     payment = Payment.objects.create(

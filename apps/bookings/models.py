@@ -21,9 +21,7 @@ class Booking(TimeStampedModel):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="bookings"
     )
-    centre = models.ForeignKey(
-        DiagnosticCentre, on_delete=models.PROTECT, related_name="bookings"
-    )
+    centre = models.ForeignKey(DiagnosticCentre, on_delete=models.PROTECT, related_name="bookings")
     test = models.ForeignKey(DiagnosticTest, on_delete=models.PROTECT, related_name="bookings")
     appointment_at = models.DateTimeField(db_index=True)
     # Snapshot of CentreTest.price at booking time; later price changes don't affect it

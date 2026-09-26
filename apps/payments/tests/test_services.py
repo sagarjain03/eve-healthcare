@@ -151,8 +151,9 @@ def test_already_paid_race_is_caught_by_one_active_constraint(booking, monkeypat
     monkeypatch.setattr(
         QuerySet,
         "exists",
-        lambda self: False if self.query.where and "PENDING" in str(self.query) else
-        real_exists(self),
+        lambda self: (
+            False if self.query.where and "PENDING" in str(self.query) else real_exists(self)
+        ),
     )
 
     with pytest.raises(Conflict) as exc_info:

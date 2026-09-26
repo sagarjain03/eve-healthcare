@@ -161,8 +161,9 @@ def test_naive_appointment_time_is_interpreted_as_utc(auth_client, offering):
 
 def test_offset_appointment_time_is_stored_in_utc(auth_client, offering):
     ist = timezone.get_fixed_timezone(330)  # +05:30
-    local = (datetime.now(ist) + timedelta(days=2)).replace(hour=9, minute=0, second=0,
-                                                            microsecond=0)
+    local = (datetime.now(ist) + timedelta(days=2)).replace(
+        hour=9, minute=0, second=0, microsecond=0
+    )
 
     response = auth_client.post(
         BOOKINGS_URL,

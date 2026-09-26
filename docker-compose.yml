@@ -15,5 +15,22 @@ services:
       timeout: 5s
       retries: 5
 
+  web:
+    build: .
+    env_file: .env
+    # These override .env: inside compose the app talks to the "db" service, uses prod settings
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DATABASE_URL: postgres://eve:eve@db:5432/eve
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      SEED_ON_START: "true"
+      LOG_FORMAT: json
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:

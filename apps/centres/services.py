@@ -14,9 +14,7 @@ from .models import CentreTest, DiagnosticCentre, DiagnosticTest
 logger = logging.getLogger(__name__)
 
 
-def _save_or_conflict(
-    instance: models.Model, conflict: type[Exception], **fields
-) -> models.Model:
+def _save_or_conflict(instance: models.Model, conflict: type[Exception], **fields) -> models.Model:
     """Apply fields and save; a unique-constraint violation becomes a 409 domain error."""
     for name, value in fields.items():
         setattr(instance, name, value)

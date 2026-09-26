@@ -17,7 +17,9 @@ class DiagnosticCentre(TimeStampedModel):
     class Meta:
         db_table = "diagnostic_centres"
         constraints = (
-            models.UniqueConstraint(Lower("name"), Lower("city"), name="centre_name_city_ci_unique"),
+            models.UniqueConstraint(
+                Lower("name"), Lower("city"), name="centre_name_city_ci_unique"
+            ),
         )
 
     def __str__(self) -> str:
@@ -48,9 +50,7 @@ class DiagnosticTest(TimeStampedModel):
 class CentreTest(TimeStampedModel):
     """A test offered at a centre, with that centre's price."""
 
-    centre = models.ForeignKey(
-        DiagnosticCentre, on_delete=models.CASCADE, related_name="offerings"
-    )
+    centre = models.ForeignKey(DiagnosticCentre, on_delete=models.CASCADE, related_name="offerings")
     test = models.ForeignKey(DiagnosticTest, on_delete=models.PROTECT, related_name="offerings")
     price = models.DecimalField(max_digits=10, decimal_places=2)
     is_active = models.BooleanField(default=True)

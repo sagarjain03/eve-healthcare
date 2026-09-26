@@ -8,7 +8,13 @@ class PaymentAdmin(admin.ModelAdmin):
     """View-only: payments change only through the payment service."""
 
     list_display = (
-        "reference", "booking", "user", "amount", "status", "refund_required", "created_at"
+        "reference",
+        "booking",
+        "user",
+        "amount",
+        "status",
+        "refund_required",
+        "created_at",
     )
     list_filter = ("status", "refund_required")
     search_fields = ("reference", "user__email", "idempotency_key")

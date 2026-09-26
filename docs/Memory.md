@@ -4,9 +4,9 @@
 > Keep entries short. Newest entries on top in the Log.
 
 ## Current Status
-- **Current phase:** Phase 7 complete
+- **Current phase:** Phase 8 complete
 - **Currently working on (file):** —
-- **Next step:** Start Phase 8 — Docker (app image + compose `web`), production settings (fix `check --deploy` warnings below), JSON logging, webhook retry command
+- **Next step:** Start Phase 9 — README & submission (overview, run with/without Docker, curl walkthrough, schema + state machine diagrams, idempotency, assumptions from Decisions, future improvements incl. Redis/Celery)
 
 ## Completed Phases
 - [x] Phase 0 — Project Setup (commit: chore: project setup with django, drf and postgres)
@@ -17,20 +17,34 @@
 - [x] Phase 5 — Simulated Payments (commit: feat: simulated payment service)
 - [x] Phase 6 — Idempotent Webhook (commit: feat: idempotent payment webhook)
 - [x] Phase 7 — Edge-case hardening & test review (commit: test: edge case coverage and consistent error handling)
+- [x] Phase 8 — Docker, structured logging, webhook retries, CI (commit: feat: docker, structured logging, webhook retries and ci)
 
-## Coverage (Phase 7)
-- **98% overall** (942 stmts, 18 missed) — 206 tests.
-- services.py: accounts 100%, bookings 100%, centres 97%, payments 99%; state_machine.py 100%; webhook.py 100%; seed_data 100%.
-- Uncovered on purpose: model `__str__`, schema-only `swagger_fake_view` branch, final bare `raise` for an unexpected constraint.
+## Coverage
+- Phase 8: **98% overall** (1043 stmts, 20 missed) — 223 tests. webhook.py 98%, logging.py / middleware.py / reprocess_webhooks 100%.
+- Phase 7: 98% (942 stmts) — 206 tests.
+- Uncovered on purpose: model `__str__`, schema-only `swagger_fake_view` branch, final bare `raise` for an unexpected constraint, the concurrent-insert `IntegrityError` branch in `_claim_event` (covered only by real races).
 
-## `check --deploy` warnings (to fix in Phase 8 production settings)
-- security.W004 — `SECURE_HSTS_SECONDS` not set
-- security.W008 — `SECURE_SSL_REDIRECT` not True
-- security.W012 — `SESSION_COOKIE_SECURE` not True
-- security.W016 — `CSRF_COOKIE_SECURE` not True
-- security.W018 — `DEBUG=True` (local settings)
+## `check --deploy` (Phase 8 status)
+- `--settings=config.settings.prod` **with HTTPS env values** (SECURE_SSL_REDIRECT, SESSION_COOKIE_SECURE, CSRF_COOKIE_SECURE=true, SECURE_HSTS_SECONDS=31536000, SECURE_HSTS_INCLUDE_SUBDOMAINS=true, SECURE_HSTS_PRELOAD=true): **0 issues**.
+- With **local-Docker defaults** (plain HTTP on localhost) 4 warnings remain **on purpose**: W004 (no HSTS), W008 (no SSL redirect), W012 / W016 (cookies not `Secure`) — turning these on without HTTPS would break login/admin over `http://localhost`. W018 (DEBUG) is gone: prod forces `DEBUG=False`.
 
 ## Files Created / Modified
+### Phase 8
+- pyproject.toml, uv.lock — `whitenoise` (only new library)
+- config/settings/prod.py — DEBUG off, required ALLOWED_HOSTS, whitenoise + STORAGES, env-driven HTTPS settings, JSON logs
+- config/settings/base.py — `RequestIdMiddleware` first in MIDDLEWARE; `LOGGING` (LOG_FORMAT text|json, LOG_LEVEL)
+- apps/common/logging.py — `JsonFormatter`, `RequestIdFilter`, `request_id_var`
+- apps/common/middleware.py — `RequestIdMiddleware` (X-Request-ID)
+- apps/common/exceptions.py — `WebhookProcessingError` (500 `INTERNAL_ERROR`)
+- apps/payments/webhook.py — FAILED events re-processed; `_claim_event`, `_record_failure`, `_process_locked`
+- apps/payments/management/commands/reprocess_webhooks.py — `--max-attempts`, `--dry-run`
+- Dockerfile, docker/entrypoint.sh, docker-compose.yml (`web` service), .dockerignore, .gitattributes
+- .env.example — every variable, commented
+- .github/workflows/ci.yml — ruff, format check, makemigrations --check, pytest --cov on Postgres 16
+- 29 files reformatted once by `ruff format .` (quotes/wrapping only, no behaviour change)
+- tests: apps/common/tests/test_logging.py, apps/payments/tests/test_reprocess_webhooks.py, retry tests in test_webhook.py
+- docs/Architecture.md — tech stack, §3.4 retry flow, file tree; docs/EdgeCases.md — retry + request-id rows; docs/Phases.md — Phase 8 ticked (Redis/Celery marked skipped)
+
 ### Phase 7
 - apps/common/views.py — `json_page_not_found` / `json_server_error` (handler404/500); health 503 now uses the standard error shape (`DATABASE_UNAVAILABLE`)
 - config/urls.py — `handler404`, `handler500`
@@ -48,7 +62,6 @@
 - docs/EdgeCases.md — full edge-case matrix (F6 + phases 2–7 → handler → tests)
 - docs/Phases.md — ticked Phase 7
 
-### Phase 6
 ### Phase 6
 - apps/payments/models.py — `Payment.refund_required`; `WebhookEventStatus`, `WebhookEvent` (table `webhook_events`)
 - apps/payments/migrations/0002_webhook_event_and_refund_required.py
@@ -214,6 +227,14 @@
 - **Timezone rule**: all datetimes stored/returned in UTC (`...Z`). An appointment_at **without an offset is interpreted as UTC**; one with an offset (e.g. `+05:30`) is converted to UTC.
 - **Secrets**: `SECRET_KEY` and `WEBHOOK_SECRET` have **no defaults** (`env('...')` raises `ImproperlyConfigured` if missing), in every environment — stricter than "required when DEBUG=False". Loggers only log ids/references/statuses/amounts; never passwords, tokens, secrets or signatures.
 - **Ownership review (Phase 7)**: every bookings/payments query on user-owned rows is scoped by `user` (views' `get_queryset`, `cancel_booking`, `_create_payment_locked`, idempotency lookup). The webhook is the only unscoped path, protected by HMAC.
+- **No Redis, no Celery** (Phase 8 scope decision): they add infrastructure the current load doesn't need. Webhook retries are handled by FAILED events + `reprocess_webhooks`; both go in README "Future improvements".
+- **whitenoise** is the only library added in Phase 8: serves collected static files (admin CSS/JS) from gunicorn, hashed + compressed, no nginx. Swagger UI JS loads from drf-spectacular's default CDN.
+- **Production settings via env** (`config/settings/prod.py`): same image runs local Docker over HTTP (defaults) or real HTTPS (flip SECURE_SSL_REDIRECT / SESSION_COOKIE_SECURE / CSRF_COOKIE_SECURE / SECURE_HSTS_* — documented in prod.py and .env.example). `SECURE_PROXY_SSL_HEADER` trusts `X-Forwarded-Proto` from the TLS proxy.
+- **Throttle caveat**: throttles use Django's default **LocMemCache, which is per gunicorn worker** (3 workers → a client could get up to ~3× the limit). Verified the auth 10/min and payments 20/min throttles work under prod settings. A shared Redis cache would make limits exact — future improvement.
+- **Webhook FAILED / retry semantics**: an unexpected (non-domain) error rolls back the whole processing transaction (booking/payment unchanged), then the event is stored as FAILED (note = exception class, attempts += 1) in a separate transaction, logged with traceback, and 500 `INTERNAL_ERROR` is returned so the provider retries. A FAILED event is **not** a duplicate: a resend (or `reprocess_webhooks`) processes it again; PROCESSED/IGNORED stay DUPLICATE. `reprocess_webhooks --max-attempts 5 [--dry-run]` re-runs FAILED events from stored payload (signature was verified on receipt) and skips those at max attempts. Booking/payment still can't change twice (single transaction + terminal payments).
+- **Structured logging**: `LOG_FORMAT=json` (default in prod/Docker) prints one JSON object per line with timestamp (UTC), level, logger, message, `request_id` and all `extra` fields; `text` locally. `X-Request-ID` is accepted if `[A-Za-z0-9-]{1,64}`, otherwise generated (uuid4 hex), and echoed in the response. Gunicorn access logs stay in gunicorn's own text format.
+- **Docker**: `python:3.12-slim` + uv (pinned `0.11.21`), deps layer cached from `uv.lock`, collectstatic at build with throw-away env, non-root user (uid 10001), HEALTHCHECK on `/health/`. Entry: migrate → seed_data (if `SEED_ON_START=true`) → gunicorn (3 workers). Compose web overrides DATABASE_URL (`db:5432`), prod settings, ALLOWED_HOSTS, JSON logs.
+- **CI** (GitHub Actions): Postgres 16 service, `uv sync --frozen`, `ruff check`, `ruff format --check`, `makemigrations --check`, `pytest --cov`. Code base was formatted once with `ruff format .` in Phase 8.
 - Shared fixtures live in a **root `conftest.py`**, not `tests/conftest.py`: pytest only applies a conftest to tests in its own folder or below, so fixtures in `tests/` were invisible to `apps/*/tests/`.
 
 ## Known Issues / TODO
@@ -224,6 +245,7 @@
 - If `uv run pytest` fails with "uv trampoline failed to canonicalize script path", regenerate the launchers: `uv sync --reinstall-package pytest --reinstall-package django`.
 
 ## Log
+- 2026-09-27 — Phase 8 finished: prod settings + whitenoise, Docker (web+db, healthchecks), JSON logging + request ids, webhook FAILED/retry + reprocess_webhooks, CI, one-time ruff format. Verified: check ✅, makemigrations --check ✅, pytest 223 passed / 98% ✅, ruff check + format ✅, spectacular ✅, check --deploy prod+HTTPS env 0 issues ✅, throttle tests under prod settings ✅. Docker: down -v → up --build → db + web healthy; logs show migrate → seed → gunicorn with JSON lines; /health/ 200, /api/docs/ 200, /admin/login/ 200, hashed admin CSS 200 via whitenoise; /nope/ JSON 404; signup → login → book → pay PENDING → send_webhook ×3 (1 PROCESSED + 2 DUPLICATE) → booking CONFIRMED; JSON logs carry request_id + payment_reference ✅. Dev DB was reset by `down -v` and re-seeded by the container.
 - 2026-09-27 — Phase 7 finished: EdgeCases.md matrix (all F6 rows tested), JSON 404/500 handlers, standard 503, 429 wait, new tests (expired JWT, concurrent payments, races, timezone, query counts, page_size cap, seed idempotency), coverage config. Verified: check ✅, check --deploy (5 warnings, for Phase 8), makemigrations --check ✅, pytest 206 passed, 98% coverage ✅, ruff clean ✅, spectacular --fail-on-warn ✅. .env confirmed untracked by git ✅.
 - 2026-09-27 — Phase 6 finished: WebhookEvent + refund_required, HMAC signature, idempotent process_webhook_event, webhook view, send_webhook.py. Verified: check ✅, makemigrations --check ✅, pytest 178 passed (incl. 5-thread concurrency) ✅, ruff clean ✅, spectacular --fail-on-warn ✅. Live on booking #3: same SUCCESS event ×5 → 1 PROCESSED + 4 DUPLICATE, booking CONFIRMED, 1 row with attempts=5 ✅; new FAILED event → IGNORED terminal_payment ✅; bad signature → 401 ✅; wrong amount → 400 AMOUNT_MISMATCH ✅. Grep: booking status only via state_machine; payment → booking only via apply_payment_result ✅.
 - 2026-09-27 — Phase 5 finished: Payment model + constraints, create_payment / apply_payment_result, payments API with Idempotency-Key + throttle, admin. Verified: check ✅, makemigrations --check ✅, pytest 156 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live FAILED → FAILED booking → SUCCESS → CONFIRMED → pay again 409 → key replay 200 same reference ✅, PENDING payment left for Phase 6 ✅. Grep: `booking.status =` only in state_machine.py; `payment.status =` only in apply_payment_result ✅.
