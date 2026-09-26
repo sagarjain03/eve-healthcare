@@ -100,12 +100,12 @@ Estimated total: ~4–6 hours of focused work (vibe-coded).
 
 ## Phase 6 — Idempotent Webhook
 **Goal:** Safe provider callbacks.
-- [ ] `WebhookEvent` model (unique `event_id`, JSONB payload, status, attempts, error).
-- [ ] `webhook.py` — `verify_signature(raw_body, header)` + `process_webhook_event(payload)`.
-- [ ] View: `POST /payments/webhook/` (no JWT, `AllowAny` + signature check, throttle exempt or high limit).
-- [ ] Rules: duplicate event → 200 no-op; unknown payment → 404; amount mismatch → 400; late FAILED after SUCCESS → IGNORED.
-- [ ] `scripts/send_webhook.py` — CLI that builds + signs + sends a webhook (for demo and README).
-- [ ] Tests: valid event updates booking, same event twice → one state change + one event row, bad signature (401), missing signature (401), unknown reference (404), amount mismatch (400), FAILED after CONFIRMED ignored, two different events for same payment handled correctly.
+- [x] `WebhookEvent` model (unique `event_id`, JSONB payload, status, attempts, error).
+- [x] `webhook.py` — `verify_signature(raw_body, header)` + `process_webhook_event(payload)`.
+- [x] View: `POST /payments/webhook/` (no JWT, `AllowAny` + signature check, throttle exempt or high limit).
+- [x] Rules: duplicate event → 200 no-op; unknown payment → 404; amount mismatch → 400; late FAILED after SUCCESS → IGNORED.
+- [x] `scripts/send_webhook.py` — CLI that builds + signs + sends a webhook (for demo and README).
+- [x] Tests: valid event updates booking, same event twice → one state change + one event row, bad signature (401), missing signature (401), unknown reference (404), amount mismatch (400), FAILED after CONFIRMED ignored, two different events for same payment handled correctly.
 
 **Done when:** sending the same webhook 5 times leaves exactly one event row and correct booking state.
 **Commit:** `feat: idempotent payment webhook`

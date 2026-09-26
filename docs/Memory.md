@@ -4,9 +4,9 @@
 > Keep entries short. Newest entries on top in the Log.
 
 ## Current Status
-- **Current phase:** Phase 5 complete
+- **Current phase:** Phase 6 complete
 - **Currently working on (file):** —
-- **Next step:** Start Phase 6 — Idempotent Webhook (`WebhookEvent` model, HMAC signature, `POST /payments/webhook/` reusing `apply_payment_result`)
+- **Next step:** Start Phase 7 — Edge-case hardening & test review (Prd §F6 row by row, error shapes, N+1, pagination, coverage)
 
 ## Completed Phases
 - [x] Phase 0 — Project Setup (commit: chore: project setup with django, drf and postgres)
@@ -15,8 +15,24 @@
 - [x] Phase 3 — Centres & Tests catalog (commit: feat: diagnostic centres and tests catalog)
 - [x] Phase 4 — Bookings with state machine (commit: feat: booking system with state machine)
 - [x] Phase 5 — Simulated Payments (commit: feat: simulated payment service)
+- [x] Phase 6 — Idempotent Webhook (commit: feat: idempotent payment webhook)
 
 ## Files Created / Modified
+### Phase 6
+- apps/payments/models.py — `Payment.refund_required`; `WebhookEventStatus`, `WebhookEvent` (table `webhook_events`)
+- apps/payments/migrations/0002_webhook_event_and_refund_required.py
+- apps/payments/services.py — `ApplyResult` enum; `apply_payment_result` returns it and never touches a CANCELLED booking (flags refund on SUCCESS)
+- apps/payments/webhook.py — `compute_signature`, `verify_signature`, `process_webhook_event`, `WebhookResult`
+- apps/payments/serializers.py — `WebhookPayloadSerializer`, `WebhookResponseSerializer`; `refund_required` in `PaymentSerializer`
+- apps/payments/views.py — `WebhookView` (`POST /payments/webhook/`)
+- apps/payments/urls.py — webhook path listed before the router
+- apps/payments/admin.py — `refund_required` on payments; view-only `WebhookEventAdmin`
+- apps/payments/tests/test_webhook.py — signature, payload, processing, routing, throttle, 5-thread concurrency
+- scripts/send_webhook.py — stdlib CLI that signs + sends events (`--times`, `--bad-signature`)
+- config/settings/base.py, .env, .env.example — `WEBHOOK_SECRET` (required)
+- docs/Architecture.md — §3.4 webhook flow + §4 payments/webhook_events schema updated
+- docs/Phases.md — ticked Phase 6
+
 ### Phase 5
 - apps/payments/models.py — `PaymentStatus`, `Payment` (table `payments`; amount > 0, one PENDING/SUCCESS per booking, unique (user, idempotency_key) when key set)
 - apps/payments/migrations/0001_initial.py
@@ -152,16 +168,27 @@
 - **Payments throttle 20/min per user**, only on `POST /payments/` (reads not throttled).
 - Payment `amount` is copied from `booking.amount`; client-sent `amount`/`status` are ignored.
 - Schema: `ENUM_NAME_OVERRIDES` gives `BookingStatusEnum` / `PaymentStatusEnum` stable names (both models have `status`).
+- **Payment follows the provider; booking follows the user.** Webhook SUCCESS for a CANCELLED booking → payment SUCCESS, `refund_required=True`, booking stays CANCELLED, WARNING log, event PROCESSED note `refund_required` (refund itself out of scope). Webhook FAILED for a CANCELLED booking → payment FAILED, booking stays CANCELLED.
+- **Payments terminal after SUCCESS/FAILED**: a conflicting later event (FAILED after SUCCESS, SUCCESS after FAILED) → event IGNORED note `terminal_payment`, WARNING log, 200, no change.
+- A new event_id reporting the status the payment already has → IGNORED note `already_in_status`, 200.
+- **Same event_id again → 200 `{"result": "DUPLICATE"}`**, no change, no new row; `attempts` is incremented. Concurrent twins are caught by the unique `event_id` (savepoint + IntegrityError).
+- **Lock order everywhere: booking first, then payment** (matches `create_payment`) to avoid deadlocks.
+- **4xx failures store no WebhookEvent** (bad signature 401, bad payload 400, unknown reference 404 `PAYMENT_NOT_FOUND`, amount mismatch 400 `AMOUNT_MISMATCH`) so the provider can retry after a fix. Only events that reach processing are stored.
+- **Signature**: header `X-Webhook-Signature: sha256=<hex>`, hex = HMAC-SHA256(`WEBHOOK_SECRET`, exact raw body). Verified on `request.body` before parsing, with `hmac.compare_digest`. Secret/signature never logged. `WEBHOOK_SECRET` is required (no default).
+- Webhook `status` accepts only SUCCESS/FAILED (PENDING isn't a result). No JWT, `AllowAny`, not throttled.
+- `apply_payment_result` returns `ApplyResult` (APPLIED / NO_CHANGE / REFUND_REQUIRED) so the webhook can record the note.
+- Stored `payload` is the validated payload with `amount` as a string (JSON-safe).
 - Shared fixtures live in a **root `conftest.py`**, not `tests/conftest.py`: pytest only applies a conftest to tests in its own folder or below, so fixtures in `tests/` were invisible to `apps/*/tests/`.
 
 ## Known Issues / TODO
-- **Decide in Phase 6:** a user can cancel a booking while its payment is still PENDING. A later webhook SUCCESS would then try CANCELLED → CONFIRMED and hit `InvalidStateTransition`. The webhook should record this (e.g. mark event IGNORED + log; refund out of scope) rather than 500/409 the provider.
-- Dev DB has a booking with a PENDING payment left for Phase 6 webhook testing (created by the Phase 5 live flow).
+- ~~Cancel while payment PENDING, then webhook SUCCESS~~ — resolved in Phase 6 (`refund_required`).
+- Actual refunds for `refund_required` payments are out of scope (flag + admin filter only).
 - A non-numeric booking id (e.g. `/bookings/abc/`) doesn't match any URL, so Django's default 404 page is returned instead of the JSON error shape. Revisit in Phase 7 (a JSON `handler404` would cover every unmatched URL).
 - No superuser yet — developer runs `uv run python manage.py createsuperuser` manually.
 - If `uv run pytest` fails with "uv trampoline failed to canonicalize script path", regenerate the launchers: `uv sync --reinstall-package pytest --reinstall-package django`.
 
 ## Log
+- 2026-09-27 — Phase 6 finished: WebhookEvent + refund_required, HMAC signature, idempotent process_webhook_event, webhook view, send_webhook.py. Verified: check ✅, makemigrations --check ✅, pytest 178 passed (incl. 5-thread concurrency) ✅, ruff clean ✅, spectacular --fail-on-warn ✅. Live on booking #3: same SUCCESS event ×5 → 1 PROCESSED + 4 DUPLICATE, booking CONFIRMED, 1 row with attempts=5 ✅; new FAILED event → IGNORED terminal_payment ✅; bad signature → 401 ✅; wrong amount → 400 AMOUNT_MISMATCH ✅. Grep: booking status only via state_machine; payment → booking only via apply_payment_result ✅.
 - 2026-09-27 — Phase 5 finished: Payment model + constraints, create_payment / apply_payment_result, payments API with Idempotency-Key + throttle, admin. Verified: check ✅, makemigrations --check ✅, pytest 156 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live FAILED → FAILED booking → SUCCESS → CONFIRMED → pay again 409 → key replay 200 same reference ✅, PENDING payment left for Phase 6 ✅. Grep: `booking.status =` only in state_machine.py; `payment.status =` only in apply_payment_result ✅.
 - 2026-09-27 — Phase 4 finished: Booking model + constraints, state machine, create/cancel services, bookings API, admin. Verified: check ✅, makemigrations --check ✅, pytest 117 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live signup → book → list → cancel → cancel again (409) ✅, grep: `booking.status =` only in state_machine.py ✅.
 - 2026-09-27 — Phase 3 finished: centres/tests/offerings catalog, filters, admin, idempotent seed. Fixed handler returning `ERROR` for Django Http404. Verified: check ✅, makemigrations --check ✅, seed_data ×2 (2nd run creates nothing) ✅, pytest 64 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live /centres/ endpoints ✅.

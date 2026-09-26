@@ -167,6 +167,8 @@ REST_FRAMEWORK = {
 MAX_BOOKING_DAYS_AHEAD = env.int('MAX_BOOKING_DAYS_AHEAD', default=90)
 # Probability (0-1) that a payment without an explicit outcome succeeds
 PAYMENT_SUCCESS_RATE = env.float('PAYMENT_SUCCESS_RATE', default=0.8)
+# Shared secret for HMAC-SHA256 webhook signatures (required, no default)
+WEBHOOK_SECRET = env('WEBHOOK_SECRET')
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=env.int('JWT_ACCESS_MINUTES', default=30)),

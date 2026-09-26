@@ -77,19 +77,29 @@ POST /payments/ {booking_id, outcome?}   [Idempotency-Key header optional]
 
 ### 3.4 Webhook (idempotent)
 ```
-POST /payments/webhook/ {event_id, payment_reference, status, amount}
-  → verify X-Webhook-Signature (HMAC-SHA256 of raw body)       else 401
-  → validate payload                                            else 400
-  → transaction.atomic():
-       try: WebhookEvent.objects.create(event_id=..., payload=...)   (UNIQUE event_id)
-       except IntegrityError: return 200 "already processed"
-       payment = Payment.select_for_update().get(reference)    else 404
-       amount matches?                                         else 400
-       booking = Booking.select_for_update().get(payment.booking_id)
-       apply_payment_result(booking, payment, new_status)
-       event.status = PROCESSED
-  → 200
+POST /payments/webhook/ {event_id, payment_reference, status (SUCCESS|FAILED), amount}
+  (no JWT, not throttled)
+  → verify X-Webhook-Signature = "sha256=" + hex HMAC-SHA256(WEBHOOK_SECRET, raw body)
+                                                                   else 401 INVALID_SIGNATURE
+  → validate payload                                               else 400 VALIDATION_ERROR
+  → process_webhook_event():
+       event_id already stored?  → attempts += 1, 200 DUPLICATE (no change)
+       payment = Payment by reference (plain read)                 else 404 PAYMENT_NOT_FOUND
+       transaction.atomic():
+         lock booking, THEN lock payment      (same order as create_payment → no deadlock)
+         amount == payment.amount?                                 else 400 AMOUNT_MISMATCH
+         savepoint: WebhookEvent.create(event_id UNIQUE)
+           IntegrityError (concurrent twin won) → attempts += 1, 200 DUPLICATE
+         payment already in this status  → event IGNORED "already_in_status"
+         payment SUCCESS/FAILED (terminal) → event IGNORED "terminal_payment"
+         else apply_payment_result()      → event PROCESSED
+              booking CANCELLED + SUCCESS → payment SUCCESS, refund_required=True,
+                                            booking stays CANCELLED, note "refund_required"
+              booking CANCELLED + FAILED  → payment FAILED, booking stays CANCELLED
+         event.status / note / processed_at saved
+  → 200 {"event_id", "result": PROCESSED|IGNORED|DUPLICATE, "note"}
 ```
+Nothing is stored for 4xx failures (bad signature, bad payload, unknown reference, amount mismatch), so the provider can retry after the problem is fixed. Only events that reach processing get a `webhook_events` row. The payment always follows the provider; the booking follows the user (a cancelled booking is never re-confirmed).
 
 ### 3.5 Booking State Machine
 ```
@@ -139,16 +149,17 @@ bookings
 
 payments
   id PK, booking_id FK → bookings, reference UNIQUE ("pay_<uuid>"),
-  amount NUMERIC(10,2), status (PENDING|SUCCESS|FAILED),
-  idempotency_key NULL, user_id FK → users,
-  created_at, updated_at
+  amount NUMERIC(10,2) CHECK (amount > 0), status (PENDING|SUCCESS|FAILED),
+  idempotency_key NULL, failure_reason, refund_required BOOL default false,
+  user_id FK → users, created_at, updated_at
   -- UNIQUE (user_id, idempotency_key) where idempotency_key IS NOT NULL
-  -- partial UNIQUE (booking_id) WHERE status = 'SUCCESS'   (max one successful payment per booking)
+  -- partial UNIQUE (booking_id) WHERE status IN ('PENDING','SUCCESS')
+     (max one in-flight or successful payment per booking; FAILED retries allowed)
 
 webhook_events
-  id PK, event_id UNIQUE, payment_reference, payload JSONB,
-  status (RECEIVED|PROCESSED|IGNORED|FAILED), error TEXT NULL,
-  attempts INT default 0, received_at, processed_at NULL
+  id PK, event_id UNIQUE, payment_reference (indexed), payload JSONB,
+  status (PROCESSED|IGNORED|FAILED), note (e.g. refund_required, already_in_status,
+  terminal_payment), attempts INT default 1, received_at, processed_at NULL
 ```
 Design notes:
 - `bookings.amount` is a snapshot, so later price changes don't affect existing bookings.

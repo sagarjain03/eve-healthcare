@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from .models import Payment, PaymentStatus
@@ -15,6 +17,22 @@ class PaymentCreateSerializer(serializers.Serializer):
     )
 
 
+class WebhookPayloadSerializer(serializers.Serializer):
+    event_id = serializers.CharField(min_length=1, max_length=100)
+    payment_reference = serializers.RegexField(
+        r"^pay_[0-9a-f]{32}$", error_messages={"invalid": "Invalid payment reference format."}
+    )
+    # A webhook reports a final result; PENDING is not a valid webhook status
+    status = serializers.ChoiceField(choices=(PaymentStatus.SUCCESS, PaymentStatus.FAILED))
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
+
+
+class WebhookResponseSerializer(serializers.Serializer):
+    event_id = serializers.CharField()
+    result = serializers.ChoiceField(choices=("PROCESSED", "IGNORED", "DUPLICATE"))
+    note = serializers.CharField(allow_blank=True)
+
+
 class PaymentSerializer(serializers.ModelSerializer):
     booking_status = serializers.CharField(source="booking.status", read_only=True)
 
@@ -26,6 +44,7 @@ class PaymentSerializer(serializers.ModelSerializer):
             "amount",
             "status",
             "failure_reason",
+            "refund_required",
             "booking_status",
             "created_at",
             "updated_at",

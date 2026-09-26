@@ -1,6 +1,7 @@
 import logging
 import random
 import uuid
+from enum import StrEnum
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -41,21 +42,29 @@ def _new_reference() -> str:
     return f"pay_{uuid.uuid4().hex}"
 
 
+class ApplyResult(StrEnum):
+    APPLIED = "APPLIED"  # payment updated (and booking, unless it was cancelled)
+    NO_CHANGE = "NO_CHANGE"  # payment already had this status
+    REFUND_REQUIRED = "REFUND_REQUIRED"  # SUCCESS for a cancelled booking
+
+
 def apply_payment_result(
     *,
     payment: Payment,
     booking: Booking,
     new_status: str,
     failure_reason: str = SIMULATED_DECLINE,
-) -> None:
+) -> ApplyResult:
     """The SINGLE place that maps a payment result onto its booking.
 
-    Caller must hold row locks (select_for_update) on both. Re-applying the current status is a
-    no-op (idempotent). SUCCESS confirms the booking; FAILED marks it FAILED (user may retry).
+    Caller must hold row locks on both (booking first, then payment). Re-applying the current
+    status is a no-op. SUCCESS confirms the booking; FAILED marks it FAILED (user may retry).
+    The payment always follows the provider; a CANCELLED booking stays cancelled — a SUCCESS
+    for it is flagged `refund_required` instead.
     """
     old_status = payment.status
     if old_status == new_status:
-        return
+        return ApplyResult.NO_CHANGE
     if new_status not in PAYMENT_TRANSITIONS[old_status]:
         raise InvalidStateTransition(
             f"Cannot move payment from {old_status} to {new_status}.",
@@ -64,18 +73,27 @@ def apply_payment_result(
 
     payment.status = new_status
     payment.failure_reason = failure_reason if new_status == PaymentStatus.FAILED else ""
+    log_extra = {
+        "payment_reference": payment.reference,
+        "booking_id": booking.id,
+        "from": old_status,
+        "to": new_status,
+    }
+
+    if booking.status == BookingStatus.CANCELLED:
+        payment.refund_required = new_status == PaymentStatus.SUCCESS
+        payment.save(update_fields=["status", "failure_reason", "refund_required", "updated_at"])
+        if payment.refund_required:
+            logger.warning("Payment succeeded for a cancelled booking; refund required",
+                           extra=log_extra)
+            return ApplyResult.REFUND_REQUIRED
+        logger.info("Payment result applied; booking stays cancelled", extra=log_extra)
+        return ApplyResult.APPLIED
+
     payment.save(update_fields=["status", "failure_reason", "updated_at"])
     state_machine.transition(booking, BOOKING_STATUS_FOR_PAYMENT[new_status])
-
-    logger.info(
-        "Payment result applied",
-        extra={
-            "payment_reference": payment.reference,
-            "booking_id": booking.id,
-            "from": old_status,
-            "to": new_status,
-        },
-    )
+    logger.info("Payment result applied", extra=log_extra)
+    return ApplyResult.APPLIED
 
 
 def _find_idempotent_replay(user: User, idempotency_key: str, booking_id: int) -> Payment | None:

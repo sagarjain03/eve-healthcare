@@ -10,15 +10,22 @@ from drf_spectacular.utils import (
 )
 from rest_framework import mixins, status, viewsets
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.common.exceptions import NotFound
 
 from .filters import PaymentFilter
 from .models import Payment
-from .serializers import PaymentCreateSerializer, PaymentSerializer
+from .serializers import (
+    PaymentCreateSerializer,
+    PaymentSerializer,
+    WebhookPayloadSerializer,
+    WebhookResponseSerializer,
+)
 from .services import create_payment
+from .webhook import SIGNATURE_HEADER, process_webhook_event, verify_signature
 
 IDEMPOTENCY_HEADER = "Idempotency-Key"
 IDEMPOTENCY_KEY_MAX_LENGTH = 100
@@ -133,3 +140,58 @@ class PaymentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
             PaymentSerializer(payment).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+
+class WebhookView(APIView):
+    """Provider callback. Authenticated by HMAC signature, not JWT; never throttled."""
+
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    throttle_classes = ()
+
+    @extend_schema(
+        tags=["Payments – Webhook"],
+        summary="Payment provider webhook",
+        description=(
+            "Called by the (simulated) payment provider. Sign the exact raw JSON body with "
+            "HMAC-SHA256 using WEBHOOK_SECRET and send it as "
+            "`X-Webhook-Signature: sha256=<hex>`. Idempotent per `event_id`: a repeated event "
+            "returns `DUPLICATE`; an event that doesn't change anything returns `IGNORED`."
+        ),
+        auth=[],
+        parameters=[
+            OpenApiParameter(
+                SIGNATURE_HEADER,
+                OpenApiTypes.STR,
+                location=OpenApiParameter.HEADER,
+                required=True,
+                description="`sha256=<hex HMAC-SHA256 of the raw body>`",
+            )
+        ],
+        request=WebhookPayloadSerializer,
+        responses={
+            200: WebhookResponseSerializer,
+            400: OpenApiResponse(description="VALIDATION_ERROR or AMOUNT_MISMATCH"),
+            401: OpenApiResponse(description="INVALID_SIGNATURE"),
+            404: OpenApiResponse(description="PAYMENT_NOT_FOUND"),
+        },
+        examples=[
+            OpenApiExample(
+                "Payment succeeded",
+                value={
+                    "event_id": "evt_7f3c2a",
+                    "payment_reference": "pay_4304af00e70248d8a22227f25fb14c7e",
+                    "status": "SUCCESS",
+                    "amount": "400.00",
+                },
+                request_only=True,
+            )
+        ],
+    )
+    def post(self, request):
+        # Verify on the exact bytes received, before DRF parses them
+        verify_signature(request.body, request.headers.get(SIGNATURE_HEADER))
+        serializer = WebhookPayloadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = process_webhook_event(serializer.validated_data)
+        return Response({"event_id": result.event_id, "result": result.result, "note": result.note})

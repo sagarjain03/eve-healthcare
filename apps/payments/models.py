@@ -30,6 +30,8 @@ class Payment(TimeStampedModel):
     )
     idempotency_key = models.CharField(max_length=100, null=True, blank=True)
     failure_reason = models.CharField(max_length=100, blank=True)
+    # Provider charged the user but the booking was already cancelled → money must go back
+    refund_required = models.BooleanField(default=False)
 
     class Meta:
         db_table = "payments"
@@ -53,3 +55,30 @@ class Payment(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.reference} ({self.status})"
+
+
+class WebhookEventStatus(models.TextChoices):
+    PROCESSED = "PROCESSED", "Processed"
+    IGNORED = "IGNORED", "Ignored"
+    FAILED = "FAILED", "Failed"
+
+
+class WebhookEvent(models.Model):
+    """One provider event, stored once per event_id (the idempotency guard for the webhook)."""
+
+    event_id = models.CharField(max_length=100, unique=True)
+    payment_reference = models.CharField(max_length=40, db_index=True)
+    payload = models.JSONField()
+    status = models.CharField(max_length=20, choices=WebhookEventStatus.choices)
+    # e.g. "refund_required", "already_in_status", "terminal_payment"
+    note = models.CharField(max_length=255, blank=True)
+    attempts = models.PositiveIntegerField(default=1)
+    received_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "webhook_events"
+        ordering = ("-received_at",)
+
+    def __str__(self) -> str:
+        return f"{self.event_id} ({self.status})"
