@@ -1,3 +1,5 @@
+from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
+from django.http import Http404
 from rest_framework import exceptions as drf_exceptions
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
@@ -38,6 +40,16 @@ class EmailAlreadyExists(Conflict):
     message = "A user with this email already exists."
 
 
+class CentreAlreadyExists(Conflict):
+    code = "CENTRE_ALREADY_EXISTS"
+    message = "A centre with this name already exists in this city."
+
+
+class TestCodeAlreadyExists(Conflict):
+    code = "TEST_CODE_ALREADY_EXISTS"
+    message = "A test with this code already exists."
+
+
 class BusinessRuleViolation(DomainError):
     status_code = 400
     code = "BUSINESS_RULE_VIOLATION"
@@ -58,6 +70,12 @@ def custom_exception_handler(exc, context):
     """Convert domain and DRF exceptions into {"error": {code, message, details}}."""
     if isinstance(exc, DomainError):
         return Response(_error_body(exc.code, exc.message, exc.details), status=exc.status_code)
+
+    # DRF converts these internally, but we read default_code from exc, so convert up front
+    if isinstance(exc, Http404):
+        exc = drf_exceptions.NotFound()
+    elif isinstance(exc, DjangoPermissionDenied):
+        exc = drf_exceptions.PermissionDenied()
 
     response = exception_handler(exc, context)
     if response is None:

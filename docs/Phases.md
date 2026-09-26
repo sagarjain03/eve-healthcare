@@ -7,15 +7,15 @@ Estimated total: ~4–6 hours of focused work (vibe-coded).
 
 ## Phase 0 — Project Setup
 **Goal:** Empty but runnable Django project with Postgres.
-- [ ] Create folder structure from `Architecture.md` §5.
-- [ ] `pyproject.toml` + `uv.lock` (dependencies via uv, ruff + pytest config), `.gitignore`, `.env.example`.
-- [ ] Django project in `config/` with split settings (`base`, `local`, `test`).
-- [ ] `docker-compose.yml` with a `db` service (Postgres 16) — app service comes in Phase 8.
-- [ ] Create empty apps: `common`, `accounts`, `centres`, `bookings`, `payments` under `apps/`.
-- [ ] DRF + simplejwt + drf-spectacular + django-filter configured in settings.
-- [ ] `/health/` endpoint (checks DB connection).
-- [ ] `/api/docs/` Swagger loads.
-- [ ] `tests/conftest.py` with `api_client` fixture; one test for `/health/`.
+- [x] Create folder structure from `Architecture.md` §5.
+- [x] `pyproject.toml` + `uv.lock` (dependencies via uv, ruff + pytest config), `.gitignore`, `.env.example`.
+- [x] Django project in `config/` with split settings (`base`, `local`, `test`).
+- [x] `docker-compose.yml` with a `db` service (Postgres 16) — app service comes in Phase 8.
+- [x] Create empty apps: `common`, `accounts`, `centres`, `bookings`, `payments` under `apps/`.
+- [x] DRF + simplejwt + drf-spectacular + django-filter configured in settings.
+- [x] `/health/` endpoint (checks DB connection).
+- [x] `/api/docs/` Swagger loads.
+- [x] `conftest.py` (project root) with `api_client` fixture; one test for `/health/`.
 
 **Done when:** `docker compose up db` + `python manage.py runserver` works, `/api/docs/` opens, `pytest` passes.
 **Commit:** `chore: project setup with django, drf and postgres`
@@ -24,14 +24,14 @@ Estimated total: ~4–6 hours of focused work (vibe-coded).
 
 ## Phase 1 — Common Layer + Custom User
 **Goal:** Shared building blocks and the user model (before any other migration!).
-- [ ] `apps/common/models.py` — `TimeStampedModel` (abstract).
-- [ ] `apps/common/exceptions.py` — domain exceptions + custom DRF exception handler (standard error shape).
-- [ ] `apps/common/pagination.py` — default page-number pagination (page size 20, max 100).
-- [ ] `apps/common/permissions.py` — `IsAdminOrReadOnly`.
-- [ ] `apps/accounts/models.py` — custom `User` (email as username) + `UserManager`.
-- [ ] `AUTH_USER_MODEL` set; first migrations created.
-- [ ] Register User in admin.
-- [ ] Tests: user manager creates user/superuser, email normalized, exception handler output shape.
+- [x] `apps/common/models.py` — `TimeStampedModel` (abstract).
+- [x] `apps/common/exceptions.py` — domain exceptions + custom DRF exception handler (standard error shape).
+- [x] `apps/common/pagination.py` — default page-number pagination (page size 20, max 100).
+- [x] `apps/common/permissions.py` — `IsAdminOrReadOnly`.
+- [x] `apps/accounts/models.py` — custom `User` (email as username) + `UserManager`.
+- [x] `AUTH_USER_MODEL` set; first migrations created.
+- [x] Register User in admin.
+- [x] Tests: user manager creates user/superuser, email normalized, exception handler output shape.
 
 **Done when:** migrations apply on fresh DB, tests pass.
 **Commit:** `feat: common utilities and custom user model`
@@ -40,12 +40,12 @@ Estimated total: ~4–6 hours of focused work (vibe-coded).
 
 ## Phase 2 — Authentication APIs
 **Goal:** Signup, login, refresh, me.
-- [ ] `SignupSerializer` (email unique case-insensitive, Django password validators, full_name required).
-- [ ] Views + URLs: `/auth/signup/`, `/auth/login/`, `/auth/token/refresh/`, `/auth/me/`.
-- [ ] JWT lifetimes from env.
-- [ ] Throttle on signup/login (scoped throttle, e.g. 10/min).
-- [ ] Swagger docs for all auth endpoints.
-- [ ] Tests: signup success, duplicate email (409 or 400 — decide + record), weak password, invalid email, login success, wrong password (401), `/me` without token (401), with expired/invalid token (401).
+- [x] `SignupSerializer` (email unique case-insensitive, Django password validators, full_name required).
+- [x] Views + URLs: `/auth/signup/`, `/auth/login/`, `/auth/token/refresh/`, `/auth/me/`.
+- [x] JWT lifetimes from env.
+- [x] Throttle on signup/login (scoped throttle, e.g. 10/min).
+- [x] Swagger docs for all auth endpoints.
+- [x] Tests: signup success, duplicate email (409 or 400 — decide + record), weak password, invalid email, login success, wrong password (401), `/me` without token (401), with expired/invalid token (401).
 
 **Done when:** can signup → login → call `/auth/me/` via Swagger.
 **Commit:** `feat: jwt authentication`
@@ -54,14 +54,14 @@ Estimated total: ~4–6 hours of focused work (vibe-coded).
 
 ## Phase 3 — Centres & Tests
 **Goal:** Catalog of centres, tests and prices.
-- [ ] Models: `DiagnosticCentre`, `DiagnosticTest`, `CentreTest` (unique centre+test, price > 0 check).
-- [ ] Serializers: list/detail (detail includes offered tests + prices).
-- [ ] Viewsets with `IsAdminOrReadOnly`; `/centres/{id}/tests/` action for adding/updating an offering.
-- [ ] Filters: centres by `city`, by `test` (id or code).
-- [ ] Pagination on lists; `prefetch_related` to avoid N+1.
-- [ ] Management command `seed_data` — admin user, 3–4 centres, 6–8 tests, prices.
-- [ ] Admin registration.
-- [ ] Tests: public list/detail, filters, non-admin POST → 403, admin POST → 201, duplicate offering, invalid price.
+- [x] Models: `DiagnosticCentre`, `DiagnosticTest`, `CentreTest` (unique centre+test, price > 0 check).
+- [x] Serializers: list/detail (detail includes offered tests + prices).
+- [x] Viewsets with `IsAdminOrReadOnly`; `/centres/{id}/tests/` action for adding/updating an offering.
+- [x] Filters: centres by `city`, by `test` (id or code).
+- [x] Pagination on lists; `prefetch_related` to avoid N+1.
+- [x] Management command `seed_data` — admin user, 3–4 centres, 6–8 tests, prices.
+- [x] Admin registration.
+- [x] Tests: public list/detail, filters, non-admin POST → 403, admin POST → 201, duplicate offering, invalid price.
 
 **Done when:** `python manage.py seed_data` works and centres show in Swagger.
 **Commit:** `feat: diagnostic centres and tests catalog`

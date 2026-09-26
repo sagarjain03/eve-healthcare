@@ -4,16 +4,33 @@
 > Keep entries short. Newest entries on top in the Log.
 
 ## Current Status
-- **Current phase:** Phase 2 complete
+- **Current phase:** Phase 3 complete
 - **Currently working on (file):** —
-- **Next step:** Start Phase 3 — Centres & Tests catalog
+- **Next step:** Start Phase 4 — Bookings (model, state machine, create/cancel services, endpoints)
 
 ## Completed Phases
 - [x] Phase 0 — Project Setup (commit: chore: project setup with django, drf and postgres)
 - [x] Phase 1 — Common Layer + Custom User (commit: feat: common utilities and custom user model)
 - [x] Phase 2 — Authentication APIs (commit: feat: jwt authentication)
+- [x] Phase 3 — Centres & Tests catalog (commit: feat: diagnostic centres and tests catalog)
 
 ## Files Created / Modified
+### Phase 3
+- apps/centres/models.py — `DiagnosticCentre`, `DiagnosticTest`, `CentreTest` (tables `diagnostic_centres`, `diagnostic_tests`, `centre_tests` as in Architecture §4)
+- apps/centres/migrations/0001_initial.py — the three tables + constraints
+- apps/centres/services.py — `create_centre`/`update_centre`, `create_test`/`update_test` (IntegrityError → 409), `upsert_offering`
+- apps/centres/serializers.py — test, centre list/detail/write, offering read/write serializers
+- apps/centres/filters.py — `CentreFilter` (`city` iexact, `test` id or code)
+- apps/centres/views.py — `CentreViewSet` (+ `POST /centres/{id}/tests/`), `DiagnosticTestViewSet`
+- apps/centres/urls.py — DefaultRouter (`/centres/`, `/tests/`), mounted at root in config/urls.py
+- apps/centres/admin.py — all three models; centre admin with offerings inline
+- apps/centres/management/commands/seed_data.py — idempotent seed (admin, 8 tests, 4 centres, 25 offerings)
+- apps/centres/tests/ — factories.py, test_models.py, test_services.py, test_api.py; old stub tests.py deleted
+- apps/common/exceptions.py — added `CentreAlreadyExists`, `TestCodeAlreadyExists`; handler now maps Django `Http404`/`PermissionDenied` to `NOT_FOUND`/`PERMISSION_DENIED` (was `ERROR`)
+- apps/common/tests/test_exceptions.py — regression test for Http404 code
+- .env.example — `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` (dev only)
+- docs/Phases.md — ticked Phases 0–3
+
 ### Phase 2
 - config/settings/base.py — `SIMPLE_JWT` (lifetimes from env), `ScopedRateThrottle` + `auth: 10/min`
 - .env, .env.example — added `JWT_ACCESS_MINUTES`, `JWT_REFRESH_DAYS`
@@ -75,6 +92,14 @@
 - Signup/login/refresh have `authentication_classes = ()` so a stale or garbage `Authorization` header can't block them.
 - Auth endpoints (signup + login) share throttle scope `auth` = 10/min per IP.
 - Tests clear Django's cache before/after each test (autouse fixture) so throttle counters don't leak between tests.
+- Centres and tests have **no DELETE** (405). Deactivate with `PATCH {"is_active": false}` so booking history is never lost.
+- Public (anonymous + non-staff) sees only active centres, active tests, and active offerings of active tests; inactive centre detail → 404. Staff see everything.
+- Prices are returned as **strings** (DRF default for `DecimalField`, e.g. `"499.00"`) to avoid float rounding.
+- Centre name + city is unique **case-insensitively** (`Lower(name), Lower(city)` constraint) → 409 `CENTRE_ALREADY_EXISTS`.
+- Test `code` is stored **UPPERCASE** (stripped in `save()`); duplicate code in any case → 409 `TEST_CODE_ALREADY_EXISTS`.
+- `?test=` filter accepts numeric id or code (case-insensitive) and matches only centres with an active offering; `.distinct()` avoids duplicates.
+- Offering upsert: `POST /centres/{id}/tests/` → 201 created / 200 updated. Inactive test → 400 `BUSINESS_RULE_VIOLATION`. `CentreTest.centre` is CASCADE, `CentreTest.test` is PROTECT.
+- `seed_data` is idempotent (get_or_create / update_or_create; offerings' prices re-synced). Dev admin = `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` (defaults `admin@eve.local` / `Admin@12345`, **dev only**); an existing admin's password is never overwritten.
 - Shared fixtures live in a **root `conftest.py`**, not `tests/conftest.py`: pytest only applies a conftest to tests in its own folder or below, so fixtures in `tests/` were invisible to `apps/*/tests/`.
 
 ## Known Issues / TODO
@@ -82,6 +107,7 @@
 - If `uv run pytest` fails with "uv trampoline failed to canonicalize script path", regenerate the launchers: `uv sync --reinstall-package pytest --reinstall-package django`.
 
 ## Log
+- 2026-09-27 — Phase 3 finished: centres/tests/offerings catalog, filters, admin, idempotent seed. Fixed handler returning `ERROR` for Django Http404. Verified: check ✅, makemigrations --check ✅, seed_data ×2 (2nd run creates nothing) ✅, pytest 64 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live /centres/ endpoints ✅.
 - 2026-09-27 — Phase 2 finished: signup/login/refresh/me with JWT, auth throttle, factories + shared fixtures. Verified: check ✅, makemigrations --check ✅, pytest 32 passed ✅, ruff clean ✅, spectacular --fail-on-warn ✅, live signup → login → /auth/me/ ✅.
 - 2026-09-27 — Added DB-level case-insensitive unique constraint on User.email (migration 0002) + bypass-save test. pytest 15 passed ✅, ruff clean ✅.
 - 2026-09-27 — Phase 1 finished: TimeStampedModel, domain exceptions + handler, pagination, IsAdminOrReadOnly, custom User + admin, first migrate. Verified: check ✅, showmigrations accounts [X] 0001_initial ✅, pytest 14 passed ✅, ruff clean ✅.

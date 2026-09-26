@@ -1,3 +1,4 @@
+from django.http import Http404
 from rest_framework import exceptions as drf_exceptions
 
 from apps.common.exceptions import InvalidStateTransition, NotFound, custom_exception_handler
@@ -34,6 +35,13 @@ def test_drf_not_authenticated_returns_401_with_code():
     assert response.status_code == 401
     assert response.data["error"]["code"] == "NOT_AUTHENTICATED"
     assert set(response.data["error"]) == {"code", "message", "details"}
+
+
+def test_django_http404_returns_not_found_code():
+    response = custom_exception_handler(Http404(), {})
+
+    assert response.status_code == 404
+    assert response.data["error"]["code"] == "NOT_FOUND"
 
 
 def test_unknown_exception_returns_none():
