@@ -26,8 +26,9 @@ jobs:
     env:
       DJANGO_SETTINGS_MODULE: config.settings.test
       DATABASE_URL: postgres://eve:eve@localhost:5432/eve
-      SECRET_KEY: ci-not-secret
-      WEBHOOK_SECRET: ci-not-secret
+      # Dummy values, ≥ 32 bytes so the JWT library doesn't warn about a short HMAC key
+      SECRET_KEY: ci-only-not-secret-0123456789abcdefghijklmnop
+      WEBHOOK_SECRET: ci-only-not-secret-webhook-0123456789abcdef
       ALLOWED_HOSTS: localhost,127.0.0.1
 
     steps:
