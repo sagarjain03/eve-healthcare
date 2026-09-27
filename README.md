@@ -1,6 +1,8 @@
 # EVE Diagnostics — Test Booking & Payments API
 
-[![CI](https://github.com/<GITHUB_USER>/<REPO>/actions/workflows/ci.yml/badge.svg)](https://github.com/<GITHUB_USER>/<REPO>/actions/workflows/ci.yml)
+[![CI](https://github.com/sagarjain03/eve-healthcare/actions/workflows/ci.yml/badge.svg)](https://github.com/sagarjain03/eve-healthcare/actions/workflows/ci.yml)
+
+Repository: https://github.com/sagarjain03/eve-healthcare
 
 A backend-only REST API for booking diagnostic tests. Users sign up, browse diagnostic centres and the tests they offer (with per-centre prices), book a test for a date/time, and pay through a **simulated** payment service. A mock payment provider reports results through an **idempotent, HMAC-signed webhook**. Built with Django + Django REST Framework on PostgreSQL.
 
@@ -33,6 +35,10 @@ A backend-only REST API for booking diagnostic tests. Users sign up, browse diag
 Requirements: Docker (with Compose) and Python 3 (only to generate a secret and run the demo webhook script).
 
 ```bash
+# 0. Get the code
+git clone https://github.com/sagarjain03/eve-healthcare.git
+cd eve-healthcare
+
 # 1. Create your env file
 cp .env.example .env            # Windows cmd: copy .env.example .env
 

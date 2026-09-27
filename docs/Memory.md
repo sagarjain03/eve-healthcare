@@ -6,7 +6,7 @@
 ## Current Status
 - **Current phase:** Phase 9 complete — **project complete**
 - **Currently working on (file):** —
-- **Next step:** Developer: replace `<GITHUB_USER>/<REPO>` in the README CI badge, commit, push to GitHub (CI runs on push), interview prep.
+- **Next step:** Developer: commit, push to https://github.com/sagarjain03/eve-healthcare (CI runs on push), make repo public, interview prep.
 
 ## Completed Phases
 - [x] Phase 0 — Project Setup (commit: chore: project setup with django, drf and postgres)
@@ -30,6 +30,13 @@
 - With **local-Docker defaults** (plain HTTP on localhost) 4 warnings remain **on purpose**: W004 (no HSTS), W008 (no SSL redirect), W012 / W016 (cookies not `Secure`) — turning these on without HTTPS would break login/admin over `http://localhost`. W018 (DEBUG) is gone: prod forces `DEBUG=False`.
 
 ## Files Created / Modified
+### Post-project: dev test page
+- apps/common/templates/common/playground.html — single-file browser playground (login/signup, browse, book, pay SUCCESS/FAILED/PENDING, cancel, payments, webhook signed with HMAC in the browser via WebCrypto, request log)
+- config/urls.py — `/playground/` route only when `PLAYGROUND_ENABLED`
+- config/settings/base.py (`PLAYGROUND_ENABLED` default = DEBUG), prod.py (default False), test.py (True)
+- .env.example — `PLAYGROUND_ENABLED` documented; local .env set to true (so the Docker container serves it)
+- tests/test_playground.py — page served without login
+
 ### Phase 9
 - README.md — full reviewer README (quick start, API table, e2e curl walkthrough, ER + state diagrams, constraints, webhook outcomes, errors, structure, security, assumptions, limitations, improvements); Python snippet formatted by `ruff format` (ruff also checks Markdown code blocks)
 - docs/Phases.md — Phase 9 ticked (push + interview prep left to developer)
@@ -240,6 +247,7 @@
 - **Structured logging**: `LOG_FORMAT=json` (default in prod/Docker) prints one JSON object per line with timestamp (UTC), level, logger, message, `request_id` and all `extra` fields; `text` locally. `X-Request-ID` is accepted if `[A-Za-z0-9-]{1,64}`, otherwise generated (uuid4 hex), and echoed in the response. Gunicorn access logs stay in gunicorn's own text format.
 - **Docker**: `python:3.12-slim` + uv (pinned `0.11.21`), deps layer cached from `uv.lock`, collectstatic at build with throw-away env, non-root user (uid 10001), HEALTHCHECK on `/health/`. Entry: migrate → seed_data (if `SEED_ON_START=true`) → gunicorn (3 workers). Compose web overrides DATABASE_URL (`db:5432`), prod settings, ALLOWED_HOSTS, JSON logs.
 - **CI** (GitHub Actions): Postgres 16 service, `uv sync --frozen`, `ruff check`, `ruff format --check`, `makemigrations --check`, `pytest --cov`. Code base was formatted once with `ruff format .` in Phase 8.
+- **Dev playground** (`/playground/`, added after Phase 9 on request): served by Django so it's same-origin with the API (a `file://` page would be blocked by CORS, and adding a CORS library isn't allowed). Off in prod unless `PLAYGROUND_ENABLED=true`. Tokens live in `sessionStorage` (this tab only); the webhook secret is typed in and never stored. Not part of the API contract; README unchanged.
 - Shared fixtures live in a **root `conftest.py`**, not `tests/conftest.py`: pytest only applies a conftest to tests in its own folder or below, so fixtures in `tests/` were invisible to `apps/*/tests/`.
 
 ## Known Issues / TODO
@@ -250,6 +258,7 @@
 - If `uv run pytest` fails with "uv trampoline failed to canonicalize script path", regenerate the launchers: `uv sync --reinstall-package pytest --reinstall-package django`.
 
 ## Log
+- 2026-09-27 — Added dev test page `/playground/` (flag `PLAYGROUND_ENABLED`). Verified in a real browser (Playwright) against the Docker container: signup → search Delhi+CBC → book 201 → Pay PENDING 201 → webhook ×3 signed in-browser = PROCESSED + 2 DUPLICATE → booking CONFIRMED; Pay again → 409 BOOKING_NOT_PAYABLE. pytest 224 passed, ruff + format clean, spectacular ✅.
 - 2026-09-27 — Phase 9 finished, **project complete**. README verified from a clean clone (`git clone .` → temp folder; original containers stopped to free ports 8000/5433, then restarted): Quick start exactly as written → db + web healthy, /health/ 200, /api/docs/ 200; README e2e bash block extracted verbatim and run in Git Bash → every step matched (FAILED → SUCCESS 201 → replay 200 same reference → 409 BOOKING_NOT_PAYABLE → PENDING → webhook ×3 = 1 PROCESSED + 2 DUPLICATE → CONFIRMED). Fixed in README: added `-w '\n'` so printed responses don't run together. Temp clone, its containers, volume and image removed. Submission checks: no .env/.venv/staticfiles/pycache/coverage tracked, real secrets not in repo, README doc links resolve, both Mermaid diagrams render with mermaid-cli. Final: pytest 223 passed / 98% ✅, ruff check ✅, ruff format --check ✅ (after formatting README's Python block), makemigrations --check ✅, spectacular ✅.
 - 2026-09-27 — Phase 8 finished: prod settings + whitenoise, Docker (web+db, healthchecks), JSON logging + request ids, webhook FAILED/retry + reprocess_webhooks, CI, one-time ruff format. Verified: check ✅, makemigrations --check ✅, pytest 223 passed / 98% ✅, ruff check + format ✅, spectacular ✅, check --deploy prod+HTTPS env 0 issues ✅, throttle tests under prod settings ✅. Docker: down -v → up --build → db + web healthy; logs show migrate → seed → gunicorn with JSON lines; /health/ 200, /api/docs/ 200, /admin/login/ 200, hashed admin CSS 200 via whitenoise; /nope/ JSON 404; signup → login → book → pay PENDING → send_webhook ×3 (1 PROCESSED + 2 DUPLICATE) → booking CONFIRMED; JSON logs carry request_id + payment_reference ✅. Dev DB was reset by `down -v` and re-seeded by the container.
 - 2026-09-27 — Phase 7 finished: EdgeCases.md matrix (all F6 rows tested), JSON 404/500 handlers, standard 503, 429 wait, new tests (expired JWT, concurrent payments, races, timezone, query counts, page_size cap, seed idempotency), coverage config. Verified: check ✅, check --deploy (5 warnings, for Phase 8), makemigrations --check ✅, pytest 206 passed, 98% coverage ✅, ruff clean ✅, spectacular --fail-on-warn ✅. .env confirmed untracked by git ✅.

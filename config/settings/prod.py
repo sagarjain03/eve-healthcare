@@ -19,6 +19,8 @@ from .base import *
 from .base import BASE_DIR, LOGGING, MIDDLEWARE, env
 
 DEBUG = False
+# Dev test page stays off unless explicitly enabled (e.g. PLAYGROUND_ENABLED=true in .env)
+PLAYGROUND_ENABLED = env.bool("PLAYGROUND_ENABLED", default=False)
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 if not ALLOWED_HOSTS:

@@ -144,7 +144,7 @@ Estimated total: ~4–6 hours of focused work (vibe-coded).
 **Goal:** Reviewer can understand and run everything.
 - [x] README sections: overview, tech stack, run locally (Docker + without Docker), run tests, API endpoints table, example `curl` requests (signup → login → book → pay → webhook), DB schema (+ ER diagram in Mermaid), booking state machine, idempotency explanation, assumptions (from `memory.md` Decisions), future improvements. *(Verified from a clean clone.)*
 - [x] Final `pytest` + `ruff` run.
-- [ ] Clean git history, push to GitHub. *(History is one commit per phase; push is the developer's step — replace `<GITHUB_USER>/<REPO>` in the README CI badge.)*
+- [ ] Clean git history, push to GitHub. *(History is one commit per phase; push is the developer's step — README CI badge points to sagarjain03/eve-healthcare.)*
 - [ ] Prepare for interview: be able to explain each layer and make a small live change (e.g. add a new booking status or a new filter). *(Developer.)*
 
 **Commit:** `docs: readme and submission`

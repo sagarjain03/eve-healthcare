@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EVE Playground</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #6b7385; --line: #e3e6ec;
+    --accent: #2f6fdf; --accent-text: #ffffff; --ok: #1f8a4c; --warn: #b7791f; --bad: #c53030;
+    --grey: #6b7385; --code-bg: #f1f3f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b1f27; --text: #e6e9ef; --muted: #9aa3b5; --line: #2c323d;
+      --accent: #5b8def; --accent-text: #0b0e13; --ok: #48bb78; --warn: #ecc94b; --bad: #fc8181;
+      --grey: #9aa3b5; --code-bg: #232833;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+           display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; }
+  header span { color: var(--muted); font-size: 13px; }
+  header a { color: var(--accent); font-size: 13px; }
+  main { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px;
+         padding: 16px 20px; max-width: 1400px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 12px 16px; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+            padding: 14px 16px; margin-bottom: 16px; }
+  h2 { font-size: 15px; margin: 0 0 10px; display: flex; justify-content: space-between;
+       align-items: center; gap: 8px; }
+  h2 small { font-weight: normal; color: var(--muted); font-size: 12px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+  input, select { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px;
+                  background: var(--bg); color: var(--text); font: inherit; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 8px; }
+  .row > div { flex: 1 1 140px; }
+  button { padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); cursor: pointer;
+           background: var(--panel); color: var(--text); font: inherit; white-space: nowrap; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button.small { padding: 3px 8px; font-size: 12px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .muted { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  td .actions { display: flex; gap: 4px; flex-wrap: wrap; }
+  .table-wrap { overflow-x: auto; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px;
+           font-weight: 600; border: 1px solid currentColor; }
+  .s-PENDING { color: var(--warn); } .s-CONFIRMED, .s-SUCCESS, .s-PROCESSED { color: var(--ok); }
+  .s-FAILED { color: var(--bad); } .s-CANCELLED, .s-IGNORED, .s-DUPLICATE { color: var(--grey); }
+  .centre { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin-bottom: 6px;
+            cursor: pointer; }
+  .centre:hover, .centre.active { border-color: var(--accent); }
+  .who { padding: 8px 10px; border-radius: 6px; background: var(--code-bg); margin-bottom: 8px; }
+  .log-entry { border-bottom: 1px solid var(--line); padding: 8px 0; }
+  .log-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; cursor: pointer; }
+  .log-head code { font-size: 12px; }
+  .st { font-weight: 700; } .st.ok { color: var(--ok); } .st.err { color: var(--bad); }
+  pre { background: var(--code-bg); padding: 8px; border-radius: 6px; margin: 6px 0 0;
+        overflow-x: auto; font-size: 12px; max-height: 280px; }
+  .hint { font-size: 12px; color: var(--muted); margin: 4px 0 8px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .tabs button.on { border-color: var(--accent); color: var(--accent); }
+  .hidden { display: none; }
+  #log-panel { position: sticky; top: 12px; }
+  #log { max-height: calc(100vh - 140px); overflow-y: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>EVE Diagnostics — API Playground</h1>
+  <span>Testing page (dev only). Every button calls the real API; responses appear in the log.</span>
+  <a href="/api/docs/">Swagger</a>
+  <a href="/admin/">Admin</a>
+</header>
+
+<div id="wrong-origin" class="hidden" style="margin:16px 20px 0;padding:12px 16px;border-radius:8px;
+     border:1px solid var(--bad);color:var(--bad);background:var(--panel)">
+  <strong>This page must be opened from the Django server, not as a file / Live Server.</strong>
+  API calls go to the same address the page came from, so here they will fail (e.g. 405).
+  Open <a href="http://localhost:8000/playground/">http://localhost:8000/playground/</a> instead
+  (the Docker container or <code>runserver</code> must be running).
+</div>
+
+<main>
+  <div>
+    <!-- Account -->
+    <section>
+      <h2>1. Account</h2>
+      <div id="logged-in" class="hidden">
+        <div class="who">Logged in as <strong id="who-email"></strong></div>
+        <div class="row">
+          <button onclick="me()">GET /auth/me/</button>
+          <button onclick="logout()">Log out</button>
+        </div>
+      </div>
+      <div id="logged-out">
+        <div class="tabs">
+          <button id="tab-login" class="on" onclick="showTab('login')">Log in</button>
+          <button id="tab-signup" onclick="showTab('signup')">Sign up</button>
+        </div>
+        <div class="row">
+          <div><label for="email">Email</label><input id="email" value="tester@example.com"></div>
+          <div><label for="password">Password</label>
+            <input id="password" type="password" value="StrongPass!123"></div>
+          <div id="name-wrap" class="hidden"><label for="full-name">Full name</label>
+            <input id="full-name" value="Test User"></div>
+        </div>
+        <div class="row">
+          <button class="primary" id="auth-btn" onclick="authSubmit()">Log in</button>
+          <button onclick="useAdmin()">Use seeded admin</button>
+        </div>
+        <p class="hint">New here? Switch to <b>Sign up</b> first (you'll be logged in automatically).</p>
+      </div>
+    </section>
+
+    <!-- Centres -->
+    <section>
+      <h2>2. Find a centre &amp; book <small>public — no login needed to browse</small></h2>
+      <div class="row">
+        <div><label for="city">City</label>
+          <select id="city">
+            <option value="">All cities</option><option>Delhi</option>
+            <option>Mumbai</option><option>Bengaluru</option>
+          </select></div>
+        <div><label for="test-filter">Test (id or code, e.g. CBC)</label>
+          <input id="test-filter" placeholder="optional"></div>
+        <button class="primary" onclick="loadCentres()">Search</button>
+      </div>
+      <div id="centres" class="muted">Click Search to list centres.</div>
+      <div id="centre-detail"></div>
+    </section>
+
+    <!-- Bookings -->
+    <section>
+      <h2>3. My bookings <button class="small" onclick="loadBookings()">Refresh</button></h2>
+      <div class="row">
+        <div><label for="idem-key">Idempotency-Key for Pay (optional)</label>
+          <input id="idem-key" placeholder="e.g. order-1 — reuse it to see a 200 replay"></div>
+      </div>
+      <p class="hint">Pay ✓ = SUCCESS, Pay ✗ = FAILED, Pay ⏳ = PENDING (settle it with a webhook
+        in section 4). Buttons stay enabled so you can also see the 409/400 errors.</p>
+      <div id="bookings" class="table-wrap muted">Log in to see your bookings.</div>
+    </section>
+
+    <!-- Payments / webhook -->
+    <section>
+      <h2>4. My payments &amp; webhook <button class="small" onclick="loadPayments()">Refresh</button></h2>
+      <div class="row">
+        <div><label for="secret">Webhook secret (WEBHOOK_SECRET from .env)</label>
+          <input id="secret" type="password" placeholder="kept in this tab only, never saved"></div>
+        <div style="flex:0 0 110px"><label for="times">Send same event ×</label>
+          <input id="times" type="number" min="1" max="10" value="3"></div>
+      </div>
+      <p class="hint">Simulates the payment provider: signs the body with HMAC-SHA256 in your
+        browser and POSTs to <code>/payments/webhook/</code>. Try it on a PENDING payment.</p>
+      <div id="payments" class="table-wrap muted">Log in to see your payments.</div>
+    </section>
+  </div>
+
+  <!-- Log -->
+  <div>
+    <section id="log-panel">
+      <h2>Request log <button class="small" onclick="clearLog()">Clear</button></h2>
+      <div id="log" class="muted">Requests you make will show here (newest first).</div>
+    </section>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+// ---- state (tokens live only in this tab) ----
+const state = {
+  access: sessionStorage.getItem("access"),
+  refresh: sessionStorage.getItem("refresh"),
+  email: sessionStorage.getItem("email"),
+  mode: "login",
+};
+
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g,
+  (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const badge = (s) => `<span class="badge s-${esc(s)}">${esc(s)}</span>`;
+const localTime = (iso) => new Date(iso).toLocaleString();
+
+// ---- request log ----
+let logCount = 0;
+function log(method, path, status, data, requestId, sentBody) {
+  const box = $("log");
+  if (logCount === 0) { box.innerHTML = ""; box.classList.remove("muted"); }
+  logCount += 1;
+  const ok = status >= 200 && status < 300;
+  const entry = document.createElement("div");
+  entry.className = "log-entry";
+  entry.innerHTML = `
+    <div class="log-head">
+      <span class="st ${ok ? "ok" : "err"}">${status || "ERR"}</span>
+      <code>${esc(method)} ${esc(path)}</code>
+      ${data && data.error ? `<span class="muted">${esc(data.error.code)}</span>` : ""}
+      ${requestId ? `<span class="muted" style="margin-left:auto;font-size:11px">req ${esc(requestId)}</span>` : ""}
+    </div>
+    ${sentBody ? `<pre>→ ${esc(sentBody)}</pre>` : ""}
+    <pre>${esc(JSON.stringify(data, null, 2))}</pre>`;
+  entry.querySelector(".log-head").onclick = () =>
+    entry.querySelectorAll("pre").forEach((p) => p.classList.toggle("hidden"));
+  box.prepend(entry);
+}
+function clearLog() { logCount = 0; $("log").innerHTML = "Cleared."; $("log").classList.add("muted"); }
+
+// ---- API helper: JSON in/out, bearer token, one automatic token refresh ----
+async function api(method, path, body, { auth = true, headers = {}, raw = null, retried = false } = {}) {
+  const h = { "Content-Type": "application/json", ...headers };
+  if (auth && state.access) h.Authorization = `Bearer ${state.access}`;
+  const sent = raw ?? (body !== undefined ? JSON.stringify(body) : undefined);
+  let res, data = null;
+  try {
+    res = await fetch(path, { method, headers: h, body: sent });
+    try { data = await res.json(); } catch { data = null; }
+  } catch (e) {
+    log(method, path, 0, { error: { code: "NETWORK_ERROR", message: String(e) } });
+    return { ok: false, status: 0, data: null };
+  }
+  const tokenExpired = res.status === 401 && data?.error?.code === "TOKEN_NOT_VALID";
+  if (tokenExpired && auth && state.refresh && !retried && path !== "/auth/token/refresh/") {
+    if (await refreshToken()) return api(method, path, body, { auth, headers, raw, retried: true });
+  }
+  log(method, path, res.status, data, res.headers.get("X-Request-ID"), sent);
+  return { ok: res.ok, status: res.status, data };
+}
+
+async function refreshToken() {
+  const r = await api("POST", "/auth/token/refresh/", { refresh: state.refresh }, { auth: false });
+  if (r.ok) { setTokens(r.data.access, state.refresh, state.email); return true; }
+  logout();
+  return false;
+}
+
+// ---- account ----
+function setTokens(access, refresh, email) {
+  Object.assign(state, { access, refresh, email });
+  sessionStorage.setItem("access", access);
+  sessionStorage.setItem("refresh", refresh);
+  sessionStorage.setItem("email", email);
+  renderAccount();
+}
+function renderAccount() {
+  const inside = Boolean(state.access);
+  $("logged-in").classList.toggle("hidden", !inside);
+  $("logged-out").classList.toggle("hidden", inside);
+  $("who-email").textContent = state.email || "";
+  if (inside) { loadBookings(); loadPayments(); }
+  else {
+    $("bookings").innerHTML = "Log in to see your bookings.";
+    $("payments").innerHTML = "Log in to see your payments.";
+  }
+}
+function showTab(mode) {
+  state.mode = mode;
+  $("tab-login").classList.toggle("on", mode === "login");
+  $("tab-signup").classList.toggle("on", mode === "signup");
+  $("name-wrap").classList.toggle("hidden", mode !== "signup");
+  $("auth-btn").textContent = mode === "login" ? "Log in" : "Sign up & log in";
+}
+function useAdmin() {
+  showTab("login");
+  $("email").value = "admin@eve.local";
+  $("password").value = "Admin@12345";
+}
+async function authSubmit() {
+  const email = $("email").value.trim(), password = $("password").value;
+  if (state.mode === "signup") {
+    const r = await api("POST", "/auth/signup/",
+      { email, password, full_name: $("full-name").value.trim() }, { auth: false });
+    if (!r.ok) return;
+  }
+  const r = await api("POST", "/auth/login/", { email, password }, { auth: false });
+  if (r.ok) setTokens(r.data.access, r.data.refresh, email.toLowerCase());
+}
+function me() { api("GET", "/auth/me/"); }
+function logout() {
+  Object.assign(state, { access: null, refresh: null, email: null });
+  sessionStorage.clear();
+  renderAccount();
+}
+
+// ---- centres & booking ----
+async function loadCentres() {
+  const params = new URLSearchParams();
+  if ($("city").value) params.set("city", $("city").value);
+  if ($("test-filter").value.trim()) params.set("test", $("test-filter").value.trim());
+  const r = await api("GET", `/centres/?${params}`, undefined, { auth: false });
+  $("centre-detail").innerHTML = "";
+  if (!r.ok) { $("centres").innerHTML = "Could not load centres (see log)."; return; }
+  const list = r.data.results;
+  $("centres").classList.remove("muted");
+  $("centres").innerHTML = list.length ? list.map((c) => `
+      <div class="centre" data-id="${c.id}" onclick="loadCentre(${c.id})">
+        <strong>${esc(c.name)}</strong> <span class="muted">· ${esc(c.city)} · ${esc(c.address)}</span>
+      </div>`).join("")
+    : `<span class="muted">No centres match.</span>`;
+}
+
+function defaultSlot() {
+  const d = new Date(Date.now() + 3 * 864e5);
+  d.setHours(10, 0, 0, 0);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T10:00`;
+}
+
+async function loadCentre(id) {
+  document.querySelectorAll(".centre").forEach((el) =>
+    el.classList.toggle("active", Number(el.dataset.id) === id));
+  const r = await api("GET", `/centres/${id}/`, undefined, { auth: false });
+  if (!r.ok) return;
+  const c = r.data;
+  $("centre-detail").innerHTML = `
+    <div class="row" style="margin-top:10px">
+      <div><label for="slot">Appointment (your local time → sent as UTC)</label>
+        <input id="slot" type="datetime-local" value="${defaultSlot()}"></div>
+    </div>
+    <div class="table-wrap"><table>
+      <tr><th>Test</th><th>Sample</th><th>Price (₹)</th><th></th></tr>
+      ${c.tests.map((t) => `
+        <tr><td><strong>${esc(t.test_code)}</strong> ${esc(t.test_name)}</td>
+          <td>${esc(t.sample_type)}</td><td>${esc(t.price)}</td>
+          <td><button class="small primary" onclick="book(${c.id}, ${t.test_id})">Book</button></td></tr>`
+      ).join("")}
+    </table></div>`;
+}
+
+async function book(centreId, testId) {
+  if (!state.access) { alert("Log in first (section 1)."); return; }
+  const local = $("slot").value;
+  const appointment_at = new Date(local).toISOString();
+  const r = await api("POST", "/bookings/", { centre_id: centreId, test_id: testId, appointment_at });
+  if (r.ok) loadBookings();
+}
+
+async function loadBookings() {
+  if (!state.access) return;
+  const r = await api("GET", "/bookings/?page_size=50");
+  if (!r.ok) return;
+  const rows = r.data.results;
+  $("bookings").classList.remove("muted");
+  $("bookings").innerHTML = rows.length ? `<table>
+    <tr><th>#</th><th>Test @ centre</th><th>Appointment</th><th>Amount</th><th>Status</th><th>Actions</th></tr>
+    ${rows.map((b) => `
+      <tr><td>${b.id}</td>
+        <td><strong>${esc(b.test.code)}</strong> @ ${esc(b.centre.name)}</td>
+        <td>${esc(localTime(b.appointment_at))}</td><td>₹${esc(b.amount)}</td><td>${badge(b.status)}</td>
+        <td><div class="actions">
+          <button class="small" title="outcome SUCCESS" onclick="pay(${b.id}, 'SUCCESS')">Pay ✓</button>
+          <button class="small" title="outcome FAILED" onclick="pay(${b.id}, 'FAILED')">Pay ✗</button>
+          <button class="small" title="outcome PENDING" onclick="pay(${b.id}, 'PENDING')">Pay ⏳</button>
+          <button class="small" onclick="cancelBooking(${b.id})">Cancel</button>
+        </div></td></tr>`).join("")}
+    </table>` : `<span class="muted">No bookings yet — book one in section 2.</span>`;
+}
+
+async function pay(bookingId, outcome) {
+  const key = $("idem-key").value.trim();
+  const headers = key ? { "Idempotency-Key": key } : {};
+  await api("POST", "/payments/", { booking_id: bookingId, outcome }, { headers });
+  loadBookings(); loadPayments();
+}
+
+async function cancelBooking(id) {
+  await api("POST", `/bookings/${id}/cancel/`);
+  loadBookings();
+}
+
+// ---- payments & webhook ----
+async function loadPayments() {
+  if (!state.access) return;
+  const r = await api("GET", "/payments/?page_size=50");
+  if (!r.ok) return;
+  const rows = r.data.results;
+  $("payments").classList.remove("muted");
+  $("payments").innerHTML = rows.length ? `<table>
+    <tr><th>Reference</th><th>Booking</th><th>Amount</th><th>Status</th><th>Webhook</th></tr>
+    ${rows.map((p) => `
+      <tr><td><code style="font-size:11px;word-break:break-all">${esc(p.reference)}</code>
+          ${p.refund_required ? `<br><span class="badge s-FAILED">refund required</span>` : ""}</td>
+        <td>#${p.booking_id} ${badge(p.booking_status)}</td><td>₹${esc(p.amount)}</td>
+        <td>${badge(p.status)}</td>
+        <td><div class="actions">
+          <button class="small" onclick="sendWebhook('${esc(p.reference)}', '${esc(p.amount)}', 'SUCCESS')">SUCCESS</button>
+          <button class="small" onclick="sendWebhook('${esc(p.reference)}', '${esc(p.amount)}', 'FAILED')">FAILED</button>
+        </div></td></tr>`).join("")}
+    </table>` : `<span class="muted">No payments yet — use Pay in section 3.</span>`;
+}
+
+async function hmacHex(secret, message) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function sendWebhook(reference, amount, status) {
+  const secret = $("secret").value;
+  if (!secret) { alert("Paste WEBHOOK_SECRET from your .env first (section 4)."); return; }
+  const eventId = "evt_" + crypto.getRandomValues(new Uint32Array(4)).join("").slice(0, 24);
+  const body = JSON.stringify({ event_id: eventId, payment_reference: reference, status, amount });
+  const signature = "sha256=" + await hmacHex(secret, body);  // over the exact bytes we send
+  const times = Math.min(Math.max(Number($("times").value) || 1, 1), 10);
+  for (let i = 0; i < times; i++) {
+    await api("POST", "/payments/webhook/", undefined,
+      { auth: false, raw: body, headers: { "X-Webhook-Signature": signature } });
+  }
+  loadBookings(); loadPayments();
+}
+
+// Served by Django only at /playground/; anything else (Live Server, file://) can't reach the API
+if (!location.pathname.startsWith("/playground")) {
+  $("wrong-origin").classList.remove("hidden");
+}
+
+renderAccount();
+</script>
+</body>
+</html>

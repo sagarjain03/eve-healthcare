@@ -170,6 +170,8 @@ MAX_BOOKING_DAYS_AHEAD = env.int("MAX_BOOKING_DAYS_AHEAD", default=90)
 PAYMENT_SUCCESS_RATE = env.float("PAYMENT_SUCCESS_RATE", default=0.8)
 # Shared secret for HMAC-SHA256 webhook signatures (required, no default)
 WEBHOOK_SECRET = env("WEBHOOK_SECRET")
+# Dev-only HTML test page at /playground/ (on by default when DEBUG; prod.py defaults it off)
+PLAYGROUND_ENABLED = env.bool("PLAYGROUND_ENABLED", default=DEBUG)
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env.int("JWT_ACCESS_MINUTES", default=30)),
